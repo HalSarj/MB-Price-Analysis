@@ -1,0 +1,801 @@
+# Mortgage Analysis Tool - Product Requirements Document
+
+## Project Overview
+
+Rebuild the mortgage pricing analysis tool with a clean, modular architecture using pre-processed CSV data files stored in the repository. The tool will provide interactive visualizations and filtering capabilities for mortgage market analysis.
+
+## Technical Architecture
+
+### State Management Strategy
+**Recommendation: Modular State Management with Observable Pattern**
+
+```javascript
+// js/state/StateManager.js
+export class StateManager {
+  constructor() {
+    this.state = {
+      data: null,
+      filters: {
+        dateRange: [null, null],
+        lenders: [],
+        ltvRange: 'all'
+      },
+      ui: {
+        loading: false,
+        selectedView: 'table'
+      }
+    };
+    this.subscribers = new Map();
+  }
+  
+  subscribe(key, callback) {
+    if (!this.subscribers.has(key)) {
+      this.subscribers.set(key, []);
+    }
+    this.subscribers.get(key).push(callback);
+  }
+  
+  setState(path, value) {
+    // Deep update state and notify subscribers
+    this.updateNestedState(this.state, path, value);
+    this.notifySubscribers(path);
+  }
+}
+```
+
+### Data Layer Architecture
+**Centralized data management with clean separation of concerns**
+
+```javascript
+// js/data/DataManager.js
+export class DataManager {
+  constructor(stateManager) {
+    this.stateManager = stateManager;
+    this.rawData = [];
+    this.processedData = null;
+  }
+  
+  static DATA_FILES = [
+    'mortgage-data-2023.csv',
+    'mortgage-data-2024.csv', 
+    'mortgage-data-2025.csv'
+  ];
+  
+  async loadAllData() {
+    // Load and combine all CSV files
+    // Convert GrossMarginBucket to basis points
+    // Set date range in state
+  }
+}
+```
+
+## Data Structure & Column Mapping
+
+Based on the provided CSV structure, we'll use this standardized mapping:
+
+```javascript
+// js/data/ColumnMapper.js
+export const COLUMN_MAP = {
+  // Core fields
+  documentDate: 'DocumentDate',
+  lender: 'BaseLender', 
+  loanAmount: 'Loan',
+  ltv: 'LTV',
+  tieInPeriod: 'TieInPeriod',
+  initialRate: 'InitialRate',
+  purchaseType: 'PurchaseType',
+  term: 'Term',
+  
+  // Analysis fields
+  ltvBucket: 'LTV_Buckets',
+  swapRate: 'SwapRate',
+  grossMargin: 'GrossMargin',
+  grossMarginBucket: 'GrossMarginBucket'
+};
+
+// Convert decimal margin buckets to basis points
+// "0.4-0.6" → "40-60bps"
+export function convertMarginBucketToBps(bucketString) {
+  const [min, max] = bucketString.split('-').map(parseFloat);
+  return `${Math.round(min * 10000)}-${Math.round(max * 10000)}`;
+}
+```
+
+## Development Phases
+
+### Phase 1: Core Data Foundation
+**Goal: Load data and display basic information**
+
+#### Data Loading System
+```javascript
+// js/data/DataLoader.js
+export class DataLoader {
+  static async loadCSV(filename) {
+    const response = await fetch(`./data/${filename}`);
+    const csvText = await response.text();
+    
+    return new Promise((resolve) => {
+      Papa.parse(csvText, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: (results) => resolve(results.data)
+      });
+    });
+  }
+  
+  static async loadAllYears() {
+    const datasets = await Promise.all(
+      DataManager.DATA_FILES.map(file => this.loadCSV(file))
+    );
+    
+    return this.combineAndProcess(datasets);
+  }
+  
+  static combineAndProcess(datasets) {
+    const combined = datasets.flat();
+    
+    // Convert margin buckets to basis points
+    combined.forEach(record => {
+      if (record.GrossMarginBucket) {
+        record.PremiumBand = convertMarginBucketToBps(record.GrossMarginBucket);
+      }
+    });
+    
+    return combined.sort((a, b) => new Date(a.DocumentDate) - new Date(b.DocumentDate));
+  }
+}
+```
+
+#### Date Range Display
+```javascript
+// js/components/DateRangeDisplay.js
+export class DateRangeDisplay {
+  constructor(container, dataManager) {
+    this.container = container;
+    this.dataManager = dataManager;
+  }
+  
+  render(data) {
+    if (!data.length) return;
+    
+    const dates = data.map(r => new Date(r.DocumentDate));
+    const minDate = new Date(Math.min(...dates));
+    const maxDate = new Date(Math.max(...dates));
+    
+    this.container.innerHTML = `
+      <div class="date-range-info">
+        <span class="label">Data Range:</span>
+        <span class="range">${this.formatDate(minDate)} - ${this.formatDate(maxDate)}</span>
+        <span class="record-count">(${data.length.toLocaleString()} records)</span>
+      </div>
+    `;
+  }
+  
+  formatDate(date) {
+    return date.toLocaleDateString('en-GB', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric' 
+    });
+  }
+}
+```
+
+#### Basic HTML Structure
+```html
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mortgage Analysis Tool</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="app-header">
+            <h1>Mortgage Pricing Analysis</h1>
+            <div id="date-range-display"></div>
+            <div id="loading-indicator" class="hidden">
+                <div class="spinner"></div>
+                <span>Loading data...</span>
+            </div>
+        </header>
+        
+        <main id="app-content" class="hidden">
+            <!-- Content will be added in subsequent phases -->
+        </main>
+    </div>
+    
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
+```
+
+### Phase 2: Core Filtering & Table View
+**Goal: Implement primary filters and main data table**
+
+#### Filter Management System
+```javascript
+// js/filters/FilterManager.js
+export class FilterManager {
+  constructor(stateManager, dataManager) {
+    this.stateManager = stateManager;
+    this.dataManager = dataManager;
+  }
+  
+  applyFilters(data) {
+    const filters = this.stateManager.state.filters;
+    
+    return data.filter(record => {
+      // Date range filter
+      if (filters.dateRange[0] && filters.dateRange[1]) {
+        const recordDate = new Date(record.DocumentDate);
+        if (recordDate < filters.dateRange[0] || recordDate > filters.dateRange[1]) {
+          return false;
+        }
+      }
+      
+      // Lender filter
+      if (filters.lenders.length > 0) {
+        if (!filters.lenders.includes(record.BaseLender)) {
+          return false;
+        }
+      }
+      
+      // LTV filter
+      if (filters.ltvRange !== 'all') {
+        const ltv = parseFloat(record.LTV);
+        if (filters.ltvRange === 'below-80' && ltv >= 80) return false;
+        if (filters.ltvRange === 'above-80' && ltv < 80) return false;
+        if (filters.ltvRange === 'above-85' && ltv <= 85) return false;
+        if (filters.ltvRange === 'above-90' && ltv <= 90) return false;
+      }
+      
+      return true;
+    });
+  }
+}
+```
+
+#### Filter UI Components
+```javascript
+// js/components/FilterPanel.js
+export class FilterPanel {
+  constructor(container, filterManager, stateManager) {
+    this.container = container;
+    this.filterManager = filterManager;
+    this.stateManager = stateManager;
+  }
+  
+  render(data) {
+    const uniqueLenders = [...new Set(data.map(r => r.BaseLender))].sort();
+    
+    this.container.innerHTML = `
+      <div class="filters-panel">
+        <div class="filter-group">
+          <label for="date-start">Start Date:</label>
+          <input type="date" id="date-start">
+        </div>
+        
+        <div class="filter-group">
+          <label for="date-end">End Date:</label>
+          <input type="date" id="date-end">
+        </div>
+        
+        <div class="filter-group">
+          <label for="lender-filter">Lenders:</label>
+          <select id="lender-filter" multiple size="5">
+            ${uniqueLenders.map(lender => 
+              `<option value="${lender}">${lender}</option>`
+            ).join('')}
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label for="ltv-filter">LTV Range:</label>
+          <select id="ltv-filter">
+            <option value="all">All LTV</option>
+            <option value="below-80">Below 80%</option>
+            <option value="above-80">80% and above</option>
+            <option value="above-85">85% and above</option>
+            <option value="above-90">90% and above</option>
+          </select>
+        </div>
+        
+        <div class="filter-actions">
+          <button id="reset-filters" class="btn btn-secondary">Reset Filters</button>
+        </div>
+      </div>
+    `;
+    
+    this.attachEventListeners();
+  }
+}
+```
+
+#### Data Aggregation System
+```javascript
+// js/data/DataAggregator.js
+export class DataAggregator {
+  static aggregateByPremiumBandAndMonth(data) {
+    const result = {
+      premiumBands: [],
+      months: [],
+      data: {},
+      totals: { byPremiumBand: {}, byMonth: {}, overall: 0 }
+    };
+    
+    // Get unique premium bands (converted to basis points)
+    const bands = [...new Set(data.map(r => r.PremiumBand))].sort((a, b) => {
+      const aNum = parseInt(a.split('-')[0]);
+      const bNum = parseInt(b.split('-')[0]);
+      return aNum - bNum;
+    });
+    
+    // Get unique months
+    const months = [...new Set(data.map(r => {
+      const date = new Date(r.DocumentDate);
+      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+    }))].sort();
+    
+    // Initialize structure
+    result.premiumBands = bands;
+    result.months = months;
+    
+    bands.forEach(band => {
+      result.data[band] = {};
+      result.totals.byPremiumBand[band] = 0;
+      months.forEach(month => {
+        result.data[band][month] = 0;
+      });
+    });
+    
+    // Aggregate loan amounts
+    data.forEach(record => {
+      const band = record.PremiumBand;
+      const recordDate = new Date(record.DocumentDate);
+      const month = `${recordDate.getFullYear()}-${(recordDate.getMonth() + 1).toString().padStart(2, '0')}`;
+      const loanAmount = parseFloat(record.Loan) || 0;
+      
+      if (band && months.includes(month)) {
+        result.data[band][month] += loanAmount;
+        result.totals.byPremiumBand[band] += loanAmount;
+        result.totals.byMonth[month] = (result.totals.byMonth[month] || 0) + loanAmount;
+        result.totals.overall += loanAmount;
+      }
+    });
+    
+    return result;
+  }
+}
+```
+
+#### Main Data Table
+```javascript
+// js/components/DataTable.js
+export class DataTable {
+  constructor(container, stateManager) {
+    this.container = container;
+    this.stateManager = stateManager;
+    this.table = null;
+  }
+  
+  render(aggregatedData) {
+    if (this.table) {
+      this.table.destroy();
+    }
+    
+    const tableData = this.prepareTableData(aggregatedData);
+    const columns = this.buildColumns(aggregatedData);
+    
+    this.table = new Tabulator(this.container, {
+      data: tableData,
+      columns: columns,
+      layout: "fitColumns",
+      height: "450px",
+      rowFormatter: (row) => {
+        if (row.getData().premiumBand === "Total") {
+          row.getElement().style.fontWeight = "bold";
+          row.getElement().style.backgroundColor = "#f0f0f0";
+        }
+      }
+    });
+  }
+  
+  buildColumns(aggregatedData) {
+    const columns = [
+      { 
+        title: "Premium Band (bps)", 
+        field: "premiumBand", 
+        frozen: true,
+        headerSort: false 
+      }
+    ];
+    
+    // Add month columns
+    aggregatedData.months.forEach(month => {
+      columns.push({
+        title: this.formatMonth(month),
+        field: month,
+        hozAlign: "right",
+        formatter: (cell) => {
+          const value = cell.getValue();
+          if (!value) return "£0.00m";
+          return `£${(value / 1000000).toFixed(2)}m`;
+        }
+      });
+    });
+    
+    // Add total column
+    columns.push({
+      title: "Total",
+      field: "total",
+      hozAlign: "right",
+      formatter: (cell) => {
+        const value = cell.getValue();
+        if (!value) return "£0.00m";
+        return `£${(value / 1000000).toFixed(2)}m`;
+      }
+    });
+    
+    return columns;
+  }
+}
+```
+
+### Phase 3: Market Share Analysis
+**Goal: Implement lender market share table with premium band selection**
+
+#### Premium Band Selector Component
+```javascript
+// js/components/PremiumBandSelector.js
+export class PremiumBandSelector {
+  constructor(container, stateManager) {
+    this.container = container;
+    this.stateManager = stateManager;
+    this.selectedBands = [];
+  }
+  
+  render(availableBands) {
+    this.container.innerHTML = `
+      <div class="premium-band-selector">
+        <h3>Select Premium Bands for Market Share Analysis</h3>
+        <div class="band-chips-container">
+          ${availableBands.map(band => `
+            <div class="premium-band-chip" data-band="${band}">
+              <span class="checkmark">✓</span>
+              ${band}bps
+            </div>
+          `).join('')}
+        </div>
+        <div class="selection-info">
+          <span class="selected-count">0 selected</span>
+          <button id="apply-market-share" class="btn btn-primary">Apply Analysis</button>
+        </div>
+      </div>
+    `;
+    
+    this.attachChipListeners();
+  }
+  
+  attachChipListeners() {
+    this.container.querySelectorAll('.premium-band-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        chip.classList.toggle('selected');
+        this.updateSelection();
+      });
+    });
+  }
+}
+```
+
+#### Market Share Table
+```javascript
+// js/components/MarketShareTable.js
+export class MarketShareTable {
+  constructor(container, stateManager) {
+    this.container = container;
+    this.stateManager = stateManager;
+    this.table = null;
+  }
+  
+  calculateMarketShare(data, selectedBands) {
+    const filteredData = data.filter(record => 
+      selectedBands.includes(record.PremiumBand)
+    );
+    
+    const lenderTotals = {};
+    const bandTotals = {};
+    let overallTotal = 0;
+    
+    // Initialize structures
+    const lenders = [...new Set(filteredData.map(r => r.BaseLender))];
+    
+    lenders.forEach(lender => {
+      lenderTotals[lender] = {};
+      selectedBands.forEach(band => {
+        lenderTotals[lender][band] = 0;
+        lenderTotals[lender][band + '_below80'] = 0;
+        lenderTotals[lender][band + '_above80'] = 0;
+      });
+    });
+    
+    selectedBands.forEach(band => {
+      bandTotals[band] = 0;
+      bandTotals[band + '_below80'] = 0;
+      bandTotals[band + '_above80'] = 0;
+    });
+    
+    // Aggregate data
+    filteredData.forEach(record => {
+      const lender = record.BaseLender;
+      const band = record.PremiumBand;
+      const loanAmount = parseFloat(record.Loan) || 0;
+      const ltv = parseFloat(record.LTV);
+      
+      if (lender && selectedBands.includes(band)) {
+        lenderTotals[lender][band] += loanAmount;
+        bandTotals[band] += loanAmount;
+        overallTotal += loanAmount;
+        
+        // LTV breakdown
+        if (ltv < 80) {
+          lenderTotals[lender][band + '_below80'] += loanAmount;
+          bandTotals[band + '_below80'] += loanAmount;
+        } else {
+          lenderTotals[lender][band + '_above80'] += loanAmount;
+          bandTotals[band + '_above80'] += loanAmount;
+        }
+      }
+    });
+    
+    return { lenderTotals, bandTotals, overallTotal, lenders };
+  }
+}
+```
+
+### Phase 4: Advanced Visualizations
+**Goal: Add heatmap and trends chart**
+
+#### Heatmap Visualization
+```javascript
+// js/charts/Heatmap.js
+export class Heatmap {
+  constructor(container, stateManager) {
+    this.container = container;
+    this.stateManager = stateManager;
+  }
+  
+  render(data, mode = 'lender') {
+    const heatmapData = this.prepareHeatmapData(data);
+    this.renderHeatmapTable(heatmapData, mode);
+  }
+  
+  prepareHeatmapData(data) {
+    const lenders = [...new Set(data.map(r => r.BaseLender))].sort();
+    const premiumBands = [...new Set(data.map(r => r.PremiumBand))].sort((a, b) => {
+      return parseInt(a.split('-')[0]) - parseInt(b.split('-')[0]);
+    });
+    
+    // Calculate distributions
+    const lenderMode = {};
+    const premiumMode = {};
+    
+    // Initialize structures and aggregate data
+    // ... (similar to original implementation)
+    
+    return { lenders, premiumBands, lenderMode, premiumMode };
+  }
+}
+```
+
+#### Market Share Trends Chart
+```javascript
+// js/charts/TrendsChart.js
+export class TrendsChart {
+  constructor(container, stateManager) {
+    this.container = container;
+    this.stateManager = stateManager;
+    this.chart = null;
+  }
+  
+  render(data, selectedBands) {
+    const monthlyData = this.groupByMonthAndLender(data, selectedBands);
+    const topLenders = this.findTopLenders(monthlyData, 5);
+    
+    this.renderChart(monthlyData, topLenders);
+  }
+  
+  groupByMonthAndLender(data, selectedBands) {
+    const filteredData = data.filter(record => 
+      selectedBands.includes(record.PremiumBand)
+    );
+    
+    const monthlyData = {};
+    const months = [];
+    
+    filteredData.forEach(record => {
+      const date = new Date(record.DocumentDate);
+      const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      const lender = record.BaseLender;
+      const loanAmount = parseFloat(record.Loan) || 0;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = { lenders: {}, total: 0 };
+        months.push({
+          key: monthKey,
+          label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          date: date
+        });
+      }
+      
+      if (!monthlyData[monthKey].lenders[lender]) {
+        monthlyData[monthKey].lenders[lender] = 0;
+      }
+      
+      monthlyData[monthKey].lenders[lender] += loanAmount;
+      monthlyData[monthKey].total += loanAmount;
+    });
+    
+    // Calculate percentages
+    Object.keys(monthlyData).forEach(month => {
+      const total = monthlyData[month].total;
+      Object.keys(monthlyData[month].lenders).forEach(lender => {
+        const amount = monthlyData[month].lenders[lender];
+        monthlyData[month].lenders[lender + '_pct'] = (amount / total) * 100;
+      });
+    });
+    
+    return {
+      months: months.sort((a, b) => a.date - b.date),
+      data: monthlyData
+    };
+  }
+}
+```
+
+### Phase 5: Export & Polish
+**Goal: Add export functionality and final polish**
+
+#### Export Manager
+```javascript
+// js/export/ExportManager.js
+export class ExportManager {
+  static exportTableAsCSV(tableInstance, filename) {
+    if (tableInstance) {
+      tableInstance.download("csv", filename);
+    }
+  }
+  
+  static exportTrendsData(monthlyData, lenders, filename) {
+    let csvContent = 'Month,';
+    
+    // Add header row
+    lenders.forEach(lender => {
+      csvContent += `${lender} (%),`;
+    });
+    csvContent = csvContent.slice(0, -1) + '\n';
+    
+    // Add data rows
+    monthlyData.months.forEach(monthData => {
+      csvContent += monthData.label + ',';
+      lenders.forEach(lender => {
+        const pctValue = monthlyData.data[monthData.key].lenders[lender + '_pct'] || 0;
+        csvContent += `${pctValue.toFixed(1)},`;
+      });
+      csvContent = csvContent.slice(0, -1) + '\n';
+    });
+    
+    // Create download
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+}
+```
+
+## Key Features Preserved from Original
+
+### Core Functionality
+- ✅ Premium band analysis (converted from decimal to basis points)
+- ✅ Multi-dimensional filtering (date, lender, LTV)
+- ✅ Market share analysis with LTV breakdowns
+- ✅ Time series trend analysis
+- ✅ Heatmap visualizations
+- ✅ Data export capabilities
+
+### Data Processing
+- ✅ Loan amount aggregation by premium band and month
+- ✅ Market share calculations within selected bands
+- ✅ LTV-based segmentation
+- ✅ Date range filtering
+
+### Visualizations
+- ✅ Main aggregation table with month columns
+- ✅ Market share table with visual indicators
+- ✅ Distribution heatmap (lender vs premium band)
+- ✅ Market share trends over time (line chart)
+
+## Technical Dependencies
+
+```json
+{
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "papaparse": "^5.4.1", 
+    "tabulator-tables": "^5.5.0"
+  }
+}
+```
+
+## File Structure
+
+```
+mortgage-analysis-tool/
+├── index.html
+├── css/
+│   └── styles.css
+├── js/
+│   ├── app.js                 # Main application entry
+│   ├── state/
+│   │   └── StateManager.js    # Centralized state management
+│   ├── data/
+│   │   ├── DataManager.js     # Data loading orchestration
+│   │   ├── DataLoader.js      # CSV loading utilities
+│   │   ├── DataAggregator.js  # Data processing & aggregation
+│   │   └── ColumnMapper.js    # Column mapping & conversion
+│   ├── filters/
+│   │   └── FilterManager.js   # Filter logic & state
+│   ├── components/
+│   │   ├── DateRangeDisplay.js
+│   │   ├── FilterPanel.js
+│   │   ├── DataTable.js
+│   │   ├── PremiumBandSelector.js
+│   │   └── MarketShareTable.js
+│   ├── charts/
+│   │   ├── Heatmap.js
+│   │   └── TrendsChart.js
+│   └── export/
+│       └── ExportManager.js
+├── data/
+│   ├── mortgage-data-2023.csv
+│   ├── mortgage-data-2024.csv
+│   └── mortgage-data-2025.csv
+└── README.md
+```
+
+## Success Criteria
+
+### Phase 1 Success
+- [ ] All CSV files load successfully
+- [ ] Date range display shows correct min/max dates
+- [ ] Basic application structure renders
+
+### Phase 2 Success  
+- [ ] All three primary filters work correctly
+- [ ] Main data table displays aggregated data by premium band and month
+- [ ] Filtering updates table in real-time
+
+### Phase 3 Success
+- [ ] Premium band selector allows multi-selection
+- [ ] Market share table shows lender breakdown with LTV splits
+- [ ] Market share percentages calculate correctly
+
+### Phase 4 Success
+- [ ] Heatmap visualizes lender distribution across premium bands
+- [ ] Trends chart shows top 5 lenders over time
+- [ ] Both visualizations respond to current filters
+
+### Phase 5 Success
+- [ ] All tables and charts can export to CSV
+- [ ] Application handles edge cases gracefully
+- [ ] Performance is acceptable with full dataset
+
+This PRD maintains the full functionality of your original tool while providing a cleaner, more maintainable architecture using pre-processed data.

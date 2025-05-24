@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mortgage Pricing Analysis Tool</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.0/dist/css/tabulator.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="app-header">
+            <h1>Mortgage Pricing Analysis</h1>
+            <div id="date-range-display"></div>
+            <div id="loading-indicator" class="hidden">
+                <div class="spinner"></div>
+                <span>Loading data...</span>
+            </div>
+        </header>
+        
+        <main id="app-content" class="hidden">
+            <div class="controls-section">
+                <div id="filters-panel"></div>
+                <div id="premium-band-selector" class="hidden"></div>
+            </div>
+            
+            <div class="views-section">
+                <div class="view-tabs">
+                    <button class="view-tab active" data-view="table">Data Table</button>
+                    <button class="view-tab" data-view="market-share">Market Share</button>
+                    <button class="view-tab" data-view="heatmap">Heatmap</button>
+                    <button class="view-tab" data-view="trends">Trends</button>
+                </div>
+                
+                <div class="view-content">
+                    <div id="data-table-view" class="view-panel active"></div>
+                    <div id="market-share-view" class="view-panel hidden"></div>
+                    <div id="heatmap-view" class="view-panel hidden"></div>
+                    <div id="trends-view" class="view-panel hidden"></div>
+                </div>
+            </div>
+            
+            <div class="actions-section">
+                <button id="export-data" class="btn btn-primary">Export Data</button>
+            </div>
+        </main>
+    </div>
+    
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+    
+    <!-- Application Scripts -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

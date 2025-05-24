@@ -1,0 +1,18 @@
+{
+  "name": "mortgage-brain-analysis-tool",
+  "version": "1.0.0",
+  "description": "Interactive tool for mortgage pricing analysis",
+  "main": "js/app.js",
+  "scripts": {
+    "start": "http-server -c-1",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "papaparse": "^5.4.1",
+    "tabulator-tables": "^5.5.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
