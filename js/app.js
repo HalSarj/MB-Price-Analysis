@@ -7,6 +7,8 @@ import { StateManager } from './state/StateManager.js';
 import { DataManager } from './data/DataManager.js';
 import { FilterManager } from './filters/FilterManager.js';
 import { DateRangeDisplay } from './components/DateRangeDisplay.js';
+import { FilterPanel } from './components/FilterPanel.js';
+import { DataTableView } from './views/DataTableView.js';
 
 // Initialize application when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', initializeApp);
@@ -29,11 +31,33 @@ async function initializeApp() {
       dataManager
     );
     
-    // Load data
+    // Load data first
     await dataManager.loadAllData();
+    
+    // Initialize filter panel after data is loaded to prevent recursion issues
+    const filterPanel = new FilterPanel(
+      document.getElementById('filters-panel'),
+      filterManager,
+      stateManager
+    );
+    
+    // Trigger initial render of filter panel
+    filterPanel.render();
+    
+    // Initialize view components
+    const dataTableView = new DataTableView(
+      document.getElementById('data-table-view'),
+      dataManager,
+      stateManager
+    );
     
     // Initialize view tabs
     initializeViewTabs();
+    
+    // Add export button functionality
+    document.getElementById('export-data').addEventListener('click', () => {
+      dataTableView.exportCSV();
+    });
     
     // Hide loading indicator and show app content
     loadingIndicator.classList.add('hidden');
