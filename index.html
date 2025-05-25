@@ -6,11 +6,31 @@
     <title>Mortgage Pricing Analysis Tool</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.0/dist/css/tabulator.min.css">
     <link rel="stylesheet" href="css/styles.css">
+    <style>
+      /* Basic spinner for loading indicator */
+      .spinner {
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border-left-color: #09f;
+        animation: spin 1s ease infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
 </head>
 <body>
     <div class="container">
         <header class="app-header">
-            <h1>Mortgage Pricing Analysis</h1>
+            <h1>Mortgage Brain Pricing Analysis</h1>
             <div id="date-range-display"></div>
             <div id="loading-indicator" class="hidden">
                 <div class="spinner"></div>
@@ -20,7 +40,11 @@
         
         <main id="app-content" class="hidden">
             <div class="controls-section">
-                <div id="filters-panel"></div>
+                <div id="filters-container"> 
+                  <div id="filters-panel">
+                      <!-- FilterPanel.js will dynamically render ALL content here, including the apply button -->
+                  </div>
+                </div>
                 <div id="premium-band-selector" class="hidden"></div>
             </div>
             

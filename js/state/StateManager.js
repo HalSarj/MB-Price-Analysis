@@ -114,6 +114,15 @@ export class StateManager {
   }
   
   /**
+   * Get state value by path (public method)
+   * @param {string} path - Dot notation path
+   * @returns {any} State value at path
+   */
+  getState(path) {
+    return this.getStateByPath(path);
+  }
+  
+  /**
    * Get state value by path
    * @param {string} path - Dot notation path
    * @returns {any} State value at path

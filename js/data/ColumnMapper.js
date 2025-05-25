@@ -61,7 +61,7 @@ export function convertMarginBucketToBps(bucketString) {
       return bucketString; // Return original if parsing fails
     }
     
-    return `${Math.round(min * 10000)}-${Math.round(max * 10000)}`;
+    return `${Math.round(min * 100)}-${Math.round(max * 100)}`;
   } catch (error) {
     console.error('Error converting margin bucket to BPS:', error);
     return bucketString; // Return original on error

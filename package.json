@@ -5,7 +5,7 @@
   "main": "js/app.js",
   "scripts": {
     "start": "http-server -c-1",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo 'Manual testing through browser: open tests/index.html'"
   },
   "dependencies": {
     "chart.js": "^4.4.0",
@@ -13,6 +13,9 @@
     "tabulator-tables": "^5.5.0"
   },
   "devDependencies": {
-    "http-server": "^14.1.1"
-  }
+    "http-server": "^14.1.1",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "type": "module"
 }

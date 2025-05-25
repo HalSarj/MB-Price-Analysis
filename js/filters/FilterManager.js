@@ -30,18 +30,9 @@ export class FilterManager {
    * @private
    */
   onFiltersChanged() {
-    const filters = this.stateManager.state.filters;
-    
-    // Debounce filter changes (prevent rapid consecutive filtering)
-    const now = Date.now();
-    if (now - this.lastFilterTime < 100) {
-      clearTimeout(this._filterTimeout);
-    }
-    
-    this._filterTimeout = setTimeout(() => {
-      this.applyFilters(filters);
-      this.lastFilterTime = Date.now();
-    }, 100);
+    // Indicate that filter values have changed and are awaiting manual application
+    this.stateManager.setState('ui.filtersChangedPendingApply', true);
+    console.debug('[FilterManager] Filters changed, pending manual apply.');
   }
   
   /**
@@ -49,7 +40,7 @@ export class FilterManager {
    * @param {Object} filters - Filter criteria
    * @returns {Array} Filtered data
    */
-  applyFilters(filters) {
+  async applyFilters(filters) {
     try {
       // Track start time for performance monitoring
       const startTime = performance.now();
@@ -57,34 +48,44 @@ export class FilterManager {
       // Update active filters set for performance optimization
       this.updateActiveFilters(filters);
       
+      let dataToAggregate;
+
       // If no active filters, return all data
       if (this.activeFilters.size === 0) {
         const allData = this.stateManager.state.data.raw || [];
         this.stateManager.setState('data.filtered', allData);
-        this.dataManager.aggregateData(allData);
-        return allData;
+        dataToAggregate = allData;
+      } else {
+        // Apply filters
+        const rawData = this.stateManager.state.data.raw;
+        const filteredData = this.filterData(rawData, filters);
+        
+        // Update state with filtered data
+        this.stateManager.setState('data.filtered', filteredData);
+        dataToAggregate = filteredData;
       }
       
-      // Apply filters
-      const rawData = this.stateManager.state.data.raw;
-      const filteredData = this.filterData(rawData, filters);
-      
-      // Update state with filtered data
-      this.stateManager.setState('data.filtered', filteredData);
-      
-      // Re-aggregate with filtered data
-      this.dataManager.aggregateData(filteredData);
+      // Re-aggregate the data to update the table view
+      if (this.dataManager && typeof this.dataManager.aggregateData === 'function') {
+        await this.dataManager.aggregateData(dataToAggregate); // Await the aggregation
+      } else {
+        console.error('FilterManager: DataManager or aggregateData method not available.');
+      }
       
       // Log performance metrics
       const endTime = performance.now();
-      console.debug(`Filtering applied in ${(endTime - startTime).toFixed(2)}ms. Filtered ${rawData?.length || 0} to ${filteredData.length} records.`);
+      console.debug(`Filtering applied in ${(endTime - startTime).toFixed(2)}ms. Filtered ${this.stateManager.state.data.raw?.length || 0} to ${dataToAggregate.length} records.`);
       
       // Update UI state to reflect filtering is complete
       this.stateManager.setState('ui.filteringComplete', true);
+      this.stateManager.setState('ui.filtersChangedPendingApply', false);
+      this.stateManager.setState('ui.isApplyingFilters', false);
       
-      return filteredData;
+      return dataToAggregate; // Return the data that was aggregated
     } catch (error) {
       console.error('Error applying filters:', error);
+      this.stateManager.setState('ui.isApplyingFilters', false); // Ensure spinner is hidden on error
+      this.stateManager.setState('ui.filtersChangedPendingApply', false); // Reset pending state on error
       return [];
     }
   }
@@ -132,18 +133,49 @@ export class FilterManager {
   filterData(data, filters) {
     if (!data || !Array.isArray(data)) return [];
     if (!filters) return data;
+
+    console.debug('[FilterManager.filterData] Entered filterData. Filters object:', JSON.stringify(filters));
+
+    let normalizedStartDate = null;
+    let normalizedEndDate = null;
+
+    const dateRangeIsActive = this.activeFilters.has('dateRange');
+    console.debug('[FilterManager.filterData] Is dateRange active?', dateRangeIsActive);
+
+    if (dateRangeIsActive && filters.dateRange && filters.dateRange.length === 2) {
+      const startDate = filters.dateRange[0];
+      const endDate = filters.dateRange[1];
+
+      if (startDate instanceof Date && !isNaN(startDate)) {
+        normalizedStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      }
+      if (endDate instanceof Date && !isNaN(endDate)) {
+        normalizedEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+      }
+
+      console.debug('[FilterManager.filterData] Date Range for filtering:', 
+        'Start:', normalizedStartDate?.toISOString(), 
+        'End:', normalizedEndDate?.toISOString()
+      );
+    }
     
     return data.filter(record => {
       // Date range filter
       if (this.activeFilters.has('dateRange')) {
-        const recordDate = new Date(record[COLUMN_MAP.documentDate]);
-        if (isNaN(recordDate.getTime())) return false;
-        
-        const startDate = filters.dateRange[0];
-        const endDate = filters.dateRange[1];
-        
-        if (startDate && recordDate < startDate) return false;
-        if (endDate && recordDate > endDate) return false;
+        const recordDate = record[COLUMN_MAP.documentDate]; // This is now a Date object (or Invalid Date)
+
+        // Check if recordDate is a valid Date object
+        if (!(recordDate instanceof Date) || isNaN(recordDate.getTime())) {
+          return false; // Skip if record date is invalid or not a Date object
+        }
+
+        // Apply date range filtering if filter dates are valid
+        // normalizedStartDate and normalizedEndDate are already Date objects (or null)
+        if (normalizedStartDate && recordDate < normalizedStartDate) return false;
+        if (normalizedEndDate && recordDate > normalizedEndDate) return false;
+        // If normalizedStartDate or normalizedEndDate is null (due to invalid input filter),
+        // those specific checks (start or end) won't apply. If both are null,
+        // no date range filtering occurs, but the record must still have a valid date.
       }
       
       // Lender filter
@@ -203,6 +235,8 @@ export class FilterManager {
    */
   updateFilter(filterName, value) {
     try {
+      console.debug(`[FilterManager.updateFilter] Received update for filter: '${filterName}', Value:`, value);
+
       if (!this.stateManager.state.filters.hasOwnProperty(filterName)) {
         console.warn(`Unknown filter: ${filterName}`);
         return false;
@@ -246,14 +280,57 @@ export class FilterManager {
       const maxSampleSize = 10000; // Limit sample size for performance
       const dataSample = data.length > maxSampleSize ? data.slice(0, maxSampleSize) : data;
       
-      const dates = dataSample
-        .map(r => r[COLUMN_MAP.documentDate])
-        .filter(Boolean)
-        .map(d => new Date(d))
-        .filter(d => !isNaN(d.getTime()));
+      // Debug log to check date values in the data
+      console.debug('Date range calculation - sample data:', dataSample.slice(0, 5).map(r => ({
+        date: r[COLUMN_MAP.documentDate],
+        parsed: new Date(r[COLUMN_MAP.documentDate])
+      })));
       
-      const minDate = dates.length > 0 ? new Date(Math.min(...dates)) : new Date();
-      const maxDate = dates.length > 0 ? new Date(Math.max(...dates)) : new Date();
+      const dates = dataSample
+        .map(r => {
+          const dateStr = r[COLUMN_MAP.documentDate];
+          if (!dateStr) return null;
+          
+          // Try different date formats
+          let date;
+          if (typeof dateStr === 'string') {
+            if (dateStr.includes('-')) {
+              // YYYY-MM-DD format
+              date = new Date(dateStr);
+            } else if (dateStr.includes('/')) {
+              // DD/MM/YYYY or MM/DD/YYYY format
+              const parts = dateStr.split('/');
+              if (parts.length === 3) {
+                // Try DD/MM/YYYY format first
+                date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                if (isNaN(date.getTime())) {
+                  // Try MM/DD/YYYY format if DD/MM/YYYY failed
+                  date = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                }
+              }
+            } else {
+              // Try standard parsing
+              date = new Date(dateStr);
+            }
+          } else {
+            date = new Date(dateStr);
+          }
+          
+          return isNaN(date.getTime()) ? null : date;
+        })
+        .filter(Boolean);
+      
+      // Ensure we include 2025 in the date range even if no records have 2025 dates
+      const minDate = dates.length > 0 ? new Date(Math.min(...dates)) : new Date('2024-01-01');
+      let maxDate = dates.length > 0 ? new Date(Math.max(...dates)) : new Date();
+      
+      // Force maxDate to include at least May 2025
+      const may2025 = new Date('2025-05-31');
+      if (maxDate < may2025) {
+        maxDate = may2025;
+      }
+      
+      console.debug(`Date range calculated: ${minDate.toISOString()} to ${maxDate.toISOString()}`);
       
       // Get unique lenders - limit to first 100 for performance
       const lenders = [...new Set(dataSample.map(r => r[COLUMN_MAP.lender]))]
@@ -319,6 +396,10 @@ export class FilterManager {
    * @private
    */
   getDefaultFilterOptions() {
+    // Set default date range to include all of 2024 and 2025 data
+    const minDate = new Date('2024-01-01');
+    const maxDate = new Date('2025-05-31');
+    
     return {
       lenders: [],
       purchaseTypes: [],
@@ -331,11 +412,11 @@ export class FilterManager {
         { value: 'above-90', label: '90% and above' }
       ],
       dateRange: {
-        min: new Date(),
-        max: new Date(),
+        min: minDate,
+        max: maxDate,
         formatted: {
-          min: '',
-          max: ''
+          min: formatDate(minDate, 'short'),
+          max: formatDate(maxDate, 'short')
         }
       }
     };

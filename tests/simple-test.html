@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StateManager Simple Test</title>
+</head>
+<body>
+  <h1>StateManager Simple Test</h1>
+  <p>Open the browser console (F12 or right-click > Inspect > Console) to see test results.</p>
+
+  <script type="module">
+    import { StateManager } from '../js/state/StateManager.js';
+    
+    console.log('Starting StateManager tests...');
+    
+    // Create a new instance
+    const stateManager = new StateManager();
+    console.log('Initial state:', stateManager.state);
+    
+    // Test setState
+    stateManager.setState('data.raw', [{ id: 1, name: 'Test' }]);
+    console.log('After setting data.raw:', stateManager.state.data.raw);
+    
+    // Test subscription
+    let callbackCalled = false;
+    stateManager.subscribe('filters.lenders', (value) => {
+      callbackCalled = true;
+      console.log('Subscription callback called with:', value);
+    });
+    
+    stateManager.setState('filters.lenders', ['HSBC', 'Barclays']);
+    console.log('Callback called:', callbackCalled);
+    console.log('Current state:', stateManager.state);
+    
+    // Test reset
+    stateManager.resetState();
+    console.log('After reset:', stateManager.state);
+    
+    console.log('All tests completed!');
+  </script>
+</body>
+</html>

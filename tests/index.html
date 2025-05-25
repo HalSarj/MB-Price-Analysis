@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StateManager Tests</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .test-container {
+      margin-bottom: 20px;
+    }
+    .test-header {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .test-result {
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 5px;
+    }
+    .test-pass {
+      background-color: #dff0d8;
+      color: #3c763d;
+    }
+    .test-fail {
+      background-color: #f2dede;
+      color: #a94442;
+    }
+    .test-summary {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>StateManager Tests</h1>
+  <div id="test-results"></div>
+  <div id="error-container"></div>
+
+  <script type="module">
+    // Import the StateManager class
+    import { StateManager } from '../js/state/StateManager.js';
+    
+    // Simple test framework
+    const testResults = document.getElementById('test-results');
+    const errorContainer = document.getElementById('error-container');
+    let passCount = 0;
+    let failCount = 0;
+    
+    function assert(condition, message) {
+      if (!condition) {
+        throw new Error(message || "Assertion failed");
+      }
+    }
+    
+    function assertEquals(actual, expected, message) {
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(message || `Expected ${JSON.stringify(expected)}, but got ${JSON.stringify(actual)}`);
+      }
+    }
+    
+    function runTest(testName, testFn) {
+      const container = document.createElement('div');
+      container.className = 'test-container';
+      
+      const header = document.createElement('div');
+      header.className = 'test-header';
+      header.textContent = testName;
+      container.appendChild(header);
+      
+      const result = document.createElement('div');
+      result.className = 'test-result';
+      
+      try {
+        testFn();
+        result.textContent = 'PASS';
+        result.classList.add('test-pass');
+        passCount++;
+      } catch (error) {
+        result.textContent = `FAIL: ${error.message}`;
+        result.classList.add('test-fail');
+        failCount++;
+      }
+      
+      container.appendChild(result);
+      testResults.appendChild(container);
+    }
+    
+    function displaySummary() {
+      const summary = document.createElement('div');
+      summary.className = 'test-summary';
+      summary.textContent = `Tests completed: ${passCount + failCount} (${passCount} passed, ${failCount} failed)`;
+      testResults.appendChild(summary);
+    }
+    
+    try {
+      // Test 1: Initialize with default state
+      runTest('should initialize with default state', () => {
+        const stateManager = new StateManager();
+        assertEquals(stateManager.state.data.raw, null);
+        assertEquals(stateManager.state.filters.lenders, []);
+        assertEquals(stateManager.state.ui.loading, false);
+      });
+      
+      // Test 2: Update state with setState
+      runTest('should update state with setState', () => {
+        const stateManager = new StateManager();
+        const testData = [{ id: 1 }];
+        stateManager.setState('data.raw', testData);
+        assertEquals(stateManager.state.data.raw, testData);
+      });
+      
+      // Test 3: Update nested state properties
+      runTest('should update nested state properties', () => {
+        const stateManager = new StateManager();
+        const lenders = ['HSBC', 'Barclays'];
+        stateManager.setState('filters.lenders', lenders);
+        assertEquals(stateManager.state.filters.lenders, lenders);
+      });
+      
+      // Test 4: Create nested objects if they do not exist
+      runTest('should create nested objects if they do not exist', () => {
+        const stateManager = new StateManager();
+        stateManager.setState('data.custom.category', 'test');
+        assertEquals(stateManager.state.data.custom.category, 'test');
+      });
+      
+      // Test 5: Notify subscribers when state changes
+      runTest('should notify subscribers when state changes', () => {
+        const stateManager = new StateManager();
+        let callbackCalled = false;
+        let callbackValue = null;
+        
+        stateManager.subscribe('data.raw', (value) => {
+          callbackCalled = true;
+          callbackValue = value;
+        });
+        
+        const testData = [{ id: 1 }];
+        stateManager.setState('data.raw', testData);
+        
+        assert(callbackCalled, 'Callback should be called');
+        assertEquals(callbackValue, testData);
+      });
+      
+      // Test 6: Notify parent path subscribers
+      runTest('should notify parent path subscribers', () => {
+        const stateManager = new StateManager();
+        let callbackCalled = false;
+        
+        stateManager.subscribe('data', () => {
+          callbackCalled = true;
+        });
+        
+        stateManager.setState('data.raw', [{ id: 1 }]);
+        assert(callbackCalled, 'Parent path callback should be called');
+      });
+      
+      // Test 7: Notify root subscribers for any change
+      runTest('should notify root subscribers for any change', () => {
+        const stateManager = new StateManager();
+        let callbackCalled = false;
+        
+        stateManager.subscribe('*', () => {
+          callbackCalled = true;
+        });
+        
+        stateManager.setState('ui.loading', true);
+        assert(callbackCalled, 'Root callback should be called');
+      });
+      
+      // Test 8: Allow unsubscribing from state changes
+      runTest('should allow unsubscribing from state changes', () => {
+        const stateManager = new StateManager();
+        let callbackCalled = false;
+        
+        const unsubscribe = stateManager.subscribe('data.raw', () => {
+          callbackCalled = true;
+        });
+        
+        unsubscribe();
+        stateManager.setState('data.raw', [{ id: 1 }]);
+        assert(!callbackCalled, 'Callback should not be called after unsubscribing');
+      });
+      
+      // Test 9: Get state by path
+      runTest('should get state by path', () => {
+        const stateManager = new StateManager();
+        const lenders = ['HSBC'];
+        stateManager.setState('filters.lenders', lenders);
+        
+        const value = stateManager.getStateByPath('filters.lenders');
+        assertEquals(value, lenders);
+      });
+      
+      // Test 10: Return undefined for non-existent paths
+      runTest('should return undefined for non-existent paths', () => {
+        const stateManager = new StateManager();
+        const value = stateManager.getStateByPath('nonexistent.path');
+        assertEquals(value, undefined);
+      });
+      
+      // Test 11: Reset entire state
+      runTest('should reset entire state', () => {
+        const stateManager = new StateManager();
+        const testData = [{ id: 1 }];
+        
+        stateManager.setState('data.raw', testData);
+        stateManager.setState('filters.lenders', ['HSBC']);
+        stateManager.setState('ui.loading', true);
+        
+        stateManager.resetState();
+        
+        assertEquals(stateManager.state.data.raw, testData); // Raw data should be preserved
+        assertEquals(stateManager.state.filters.lenders, []);
+        assertEquals(stateManager.state.ui.loading, false);
+      });
+      
+      // Test 12: Reset specific path
+      runTest('should reset specific path', () => {
+        const stateManager = new StateManager();
+        stateManager.setState('filters.lenders', ['HSBC', 'Barclays']);
+        
+        stateManager.resetState('filters.lenders');
+        assertEquals(stateManager.state.filters.lenders, []);
+      });
+      
+      displaySummary();
+    } catch (error) {
+      console.error('Error running tests:', error);
+      errorContainer.innerHTML = `<div class="test-fail">Error running tests: ${error.message}</div>`;
+    }
+  </script>
+</body>
+</html>

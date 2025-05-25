@@ -367,6 +367,25 @@ body {
   overflow-x: auto;
 }
 
+/* Ensure Tabulator tables can scroll horizontally */
+.tabulator {
+  max-width: none !important; /* Override any max-width limitations */
+}
+
+.tabulator-tableHolder {
+  overflow-x: auto !important;
+  min-width: 100%;
+}
+
+/* Ensure the Premium Band column stays visible when scrolling */
+.tabulator-frozen {
+  z-index: 10;
+  position: sticky;
+  left: 0;
+  background-color: var(--bg-card);
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
 /* ========== BUTTON COMPONENTS ========== */
 .btn {
   display: inline-flex;
@@ -490,6 +509,82 @@ body {
   }
 }
 
+/* ========== DATA TABLE STYLES ========== */
+.data-table-container {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+  overflow: auto; /* Changed from hidden to auto to enable scrolling */
+  max-width: 100%;
+}
+
+/* Year selector styles */
+.year-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.year-selector label {
+  font-weight: 600;
+  margin-right: var(--spacing-sm);
+  color: var(--text-dark);
+}
+
+.year-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  min-width: 80px;
+  margin-right: var(--spacing-sm);
+}
+
+.table-view-controls {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.table-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.no-data-message {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  margin: var(--spacing-lg) 0;
+}
+
+.error-message {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--danger);
+  background: var(--brand-red-50);
+  border-radius: var(--radius-md);
+  margin: var(--spacing-lg) 0;
+  border: 1px solid var(--danger);
+}
+
+/* Total row styling */
+.total-row {
+  background-color: var(--brand-blue-50) !important;
+  font-weight: bold;
+}
+
+.total-row .tabulator-cell {
+  color: var(--text-dark);
+}
+
 /* ========== TABULATOR OVERRIDES ========== */
 .tabulator {
   border: none;
@@ -543,4 +638,34 @@ body {
   box-shadow: var(--shadow-md);
   position: relative;
   height: 400px;
+}
+
+/* ========== DEBUG PANEL ========== */
+.debug-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  min-width: 400px;
+  max-width: 80%;
+  color: var(--text-dark);
+  border: 2px solid var(--accent-primary);
+}
+
+.debug-panel h3 {
+  margin-bottom: var(--spacing-md);
+  color: var(--accent-primary);
+}
+
+.debug-panel p {
+  margin-bottom: var(--spacing-md);
+}
+
+.debug-panel .close-debug {
+  margin-top: var(--spacing-md);
 }

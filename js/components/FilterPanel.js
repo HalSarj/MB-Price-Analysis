@@ -89,6 +89,37 @@ export class FilterPanel {
       // Create purchase types filter
       this.createPurchaseTypesFilter(panelWrapper, filterOptions, currentFilters);
       
+      // Dynamically create and append Apply Filters button and spinner
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'filter-actions';
+      actionsDiv.style.marginTop = '15px';
+      actionsDiv.style.paddingTop = '10px';
+      actionsDiv.style.borderTop = '1px solid #eee';
+
+      const applyButton = document.createElement('button');
+      applyButton.id = 'apply-filters-button';
+      applyButton.className = 'btn btn-primary';
+      applyButton.textContent = 'Apply Filters';
+      actionsDiv.appendChild(applyButton);
+
+      const spinnerDiv = document.createElement('div');
+      spinnerDiv.id = 'loading-spinner';
+      spinnerDiv.style.display = 'none';
+      spinnerDiv.style.marginTop = '10px';
+      
+      const spinnerText = document.createElement('p');
+      spinnerText.textContent = 'Loading data, please wait...';
+      spinnerDiv.appendChild(spinnerText);
+      
+      const spinnerAnimation = document.createElement('div');
+      spinnerAnimation.className = 'spinner'; // Assumes .spinner CSS is defined elsewhere (e.g., index.html or styles.css)
+      spinnerDiv.appendChild(spinnerAnimation);
+      actionsDiv.appendChild(spinnerDiv);
+
+      panelWrapper.appendChild(actionsDiv);
+      // --- End of Apply Filters button and spinner creation ---
+      console.log('[FilterPanel] Apply Filters button and spinner DIV created and appended to panelWrapper.');
+
       // Add to container
       this.container.appendChild(panelWrapper);
     } finally {
