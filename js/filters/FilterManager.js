@@ -204,18 +204,22 @@ export class FilterManager {
           case 'above-90':
             if (ltv < 90) return false;
             break;
+          case 'above-95':
+            if (ltv < 95) return false;
+            break;
+          // default 'all' case or unrecognized values will not filter by LTV
         }
       }
       
-      // Premium band filter
+      // Premium bands filter
       if (this.activeFilters.has('premiumBands')) {
-        const band = record.PremiumBand;
-        if (!band || !filters.premiumBands.includes(band)) {
+        const premiumBand = record[COLUMN_MAP.premiumBand];
+        if (!premiumBand || !filters.premiumBands.includes(premiumBand)) {
           return false;
         }
       }
       
-      // Purchase type filter
+      // Purchase types filter
       if (this.activeFilters.has('purchaseTypes')) {
         const purchaseType = record[COLUMN_MAP.purchaseType];
         if (!purchaseType || !filters.purchaseTypes.includes(purchaseType)) {
@@ -223,16 +227,18 @@ export class FilterManager {
         }
       }
       
-      return true;
+      return true; // Record passes all active filters
     });
   }
   
   /**
-   * Update a specific filter
-   * @param {string} filterName - Name of the filter to update
-   * @param {any} value - New filter value
-   * @returns {boolean} Success status
+   * Get unique filter options from data
+   * @param {Array} data - Data to extract options from
+   * @param {string} columnKey - Key from COLUMN_MAP
+   * @returns {Array} Unique sorted options
+   * @private
    */
+<<<<<<< HEAD
   updateFilter(filterName, value) {
     try {
       console.debug(`[FilterManager.updateFilter] Received update for filter: '${filterName}', Value:`, value);
@@ -267,9 +273,8 @@ export class FilterManager {
       return this.getDefaultFilterOptions();
     }
     
-    this._gettingFilterOptions = true;
-    
-    try {
+
+<<<<<<< HEAD
       const data = this.stateManager.state.data.filtered || this.stateManager.state.data.raw;
       
       if (!data || !Array.isArray(data) || data.length === 0) {
@@ -348,53 +353,27 @@ export class FilterManager {
       dataSample.forEach(r => {
         if (r.PremiumBand && typeof r.PremiumBand === 'string') {
           premiumBandsSet.add(r.PremiumBand);
+=======
+      if (!data || !Array.isArray(data)) return [];
+      const options = new Set();
+      data.forEach(record => {
+        const value = record[columnKey];
+        if (value !== null && value !== undefined && value !== '') {
+          options.add(value);
+>>>>>>> 977f97e2c72eec34ea64409a2bbbf5ed2fbeaefb
         }
       });
-      
-      const premiumBands = Array.from(premiumBandsSet).sort((a, b) => {
-        try {
-          const aNum = parseInt(a.split('-')[0]) || 0;
-          const bNum = parseInt(b.split('-')[0]) || 0;
-          return aNum - bNum;
-        } catch (e) {
-          return 0; // If parsing fails, don't change order
-        }
-      });
-      
-      return {
-        lenders,
-        purchaseTypes,
-        premiumBands,
-        ltvRanges: [
-          { value: 'all', label: 'All LTV' },
-          { value: 'below-80', label: 'Below 80%' },
-          { value: 'above-80', label: '80% and above' },
-          { value: 'above-85', label: '85% and above' },
-          { value: 'above-90', label: '90% and above' }
-        ],
-        dateRange: {
-          min: minDate,
-          max: maxDate,
-          formatted: {
-            min: formatDate(minDate, 'short'),
-            max: formatDate(maxDate, 'short')
-          }
-        }
-      };
-    } catch (error) {
-      console.error('Error getting filter options:', error);
-      return this.getDefaultFilterOptions();
+      return Array.from(options).sort();
     } finally {
-      // Reset flag to allow future calls
       this._gettingFilterOptions = false;
     }
   }
   
   /**
-   * Get default filter options when no data is available
-   * @returns {Object} Default filter options
-   * @private
+   * Get all filter options based on current raw data
+   * @returns {Object} Object containing arrays of options for each filter type
    */
+<<<<<<< HEAD
   getDefaultFilterOptions() {
     // Set default date range to include all of 2024 and 2025 data
     const minDate = new Date('2024-01-01');
@@ -419,63 +398,21 @@ export class FilterManager {
           max: formatDate(maxDate, 'short')
         }
       }
+=======
+  getAllFilterOptions() {
+    const rawData = this.stateManager.state.data.raw;
+    if (!rawData) {
+      return {
+        lenders: [],
+        premiumBands: [],
+        purchaseTypes: []
+      };
+    }
+    return {
+      lenders: this.getUniqueOptions(rawData, COLUMN_MAP.lender),
+      premiumBands: this.getUniqueOptions(rawData, COLUMN_MAP.premiumBand),
+      purchaseTypes: this.getUniqueOptions(rawData, COLUMN_MAP.purchaseType)
+>>>>>>> 977f97e2c72eec34ea64409a2bbbf5ed2fbeaefb
     };
-  }
-  
-  /**
-   * Get filter summary for display
-   * @returns {Object} Filter summary
-   */
-  getFilterSummary() {
-    const filters = this.stateManager.state.filters;
-    const summary = {
-      activeCount: this.activeFilters.size,
-      filters: {}
-    };
-    
-    if (this.activeFilters.has('dateRange')) {
-      summary.filters.dateRange = {
-        from: formatDate(filters.dateRange[0], 'short'),
-        to: formatDate(filters.dateRange[1], 'short')
-      };
-    }
-    
-    if (this.activeFilters.has('lenders')) {
-      summary.filters.lenders = {
-        count: filters.lenders.length,
-        values: filters.lenders.slice(0, 3),
-        hasMore: filters.lenders.length > 3
-      };
-    }
-    
-    if (this.activeFilters.has('ltvRange')) {
-      const ltvRangeMap = {
-        'all': 'All LTV',
-        'below-80': 'Below 80%',
-        'above-80': '80% and above',
-        'above-85': '85% and above',
-        'above-90': '90% and above'
-      };
-      
-      summary.filters.ltvRange = ltvRangeMap[filters.ltvRange] || filters.ltvRange;
-    }
-    
-    if (this.activeFilters.has('premiumBands')) {
-      summary.filters.premiumBands = {
-        count: filters.premiumBands.length,
-        values: filters.premiumBands.slice(0, 3),
-        hasMore: filters.premiumBands.length > 3
-      };
-    }
-    
-    if (this.activeFilters.has('purchaseTypes')) {
-      summary.filters.purchaseTypes = {
-        count: filters.purchaseTypes.length,
-        values: filters.purchaseTypes.slice(0, 3),
-        hasMore: filters.purchaseTypes.length > 3
-      };
-    }
-    
-    return summary;
   }
 }
