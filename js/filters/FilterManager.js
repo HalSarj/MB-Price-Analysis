@@ -238,7 +238,6 @@ export class FilterManager {
    * @returns {Array} Unique sorted options
    * @private
    */
-<<<<<<< HEAD
   updateFilter(filterName, value) {
     try {
       console.debug(`[FilterManager.updateFilter] Received update for filter: '${filterName}', Value:`, value);
@@ -272,9 +271,7 @@ export class FilterManager {
     if (this._gettingFilterOptions) {
       return this.getDefaultFilterOptions();
     }
-    
-
-<<<<<<< HEAD
+    try {
       const data = this.stateManager.state.data.filtered || this.stateManager.state.data.raw;
       
       if (!data || !Array.isArray(data) || data.length === 0) {
@@ -353,27 +350,28 @@ export class FilterManager {
       dataSample.forEach(r => {
         if (r.PremiumBand && typeof r.PremiumBand === 'string') {
           premiumBandsSet.add(r.PremiumBand);
-=======
-      if (!data || !Array.isArray(data)) return [];
-      const options = new Set();
-      data.forEach(record => {
-        const value = record[columnKey];
-        if (value !== null && value !== undefined && value !== '') {
-          options.add(value);
->>>>>>> 977f97e2c72eec34ea64409a2bbbf5ed2fbeaefb
         }
       });
-      return Array.from(options).sort();
+      return {
+        lenders: Array.from(lenders).sort(),
+        purchaseTypes: Array.from(purchaseTypes).sort(),
+        premiumBands: Array.from(premiumBandsSet).sort(),
+        ltvRanges: this.getDefaultFilterOptions().ltvRanges,
+        dateRange: this.getDefaultFilterOptions().dateRange
+      };
+    } catch (error) {
+      console.error('Error getting filter options:', error);
+      return this.getDefaultFilterOptions(); // Fallback to defaults on error
     } finally {
       this._gettingFilterOptions = false;
     }
   }
   
   /**
-   * Get all filter options based on current raw data
-   * @returns {Object} Object containing arrays of options for each filter type
+   * Get default filter options.
+   * This can be used as a fallback or for initializing filters.
+   * @returns {Object} Default filter options
    */
-<<<<<<< HEAD
   getDefaultFilterOptions() {
     // Set default date range to include all of 2024 and 2025 data
     const minDate = new Date('2024-01-01');
@@ -398,21 +396,6 @@ export class FilterManager {
           max: formatDate(maxDate, 'short')
         }
       }
-=======
-  getAllFilterOptions() {
-    const rawData = this.stateManager.state.data.raw;
-    if (!rawData) {
-      return {
-        lenders: [],
-        premiumBands: [],
-        purchaseTypes: []
-      };
-    }
-    return {
-      lenders: this.getUniqueOptions(rawData, COLUMN_MAP.lender),
-      premiumBands: this.getUniqueOptions(rawData, COLUMN_MAP.premiumBand),
-      purchaseTypes: this.getUniqueOptions(rawData, COLUMN_MAP.purchaseType)
->>>>>>> 977f97e2c72eec34ea64409a2bbbf5ed2fbeaefb
     };
   }
-}
+} // Closes the FilterManager class
