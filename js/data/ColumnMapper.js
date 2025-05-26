@@ -61,7 +61,12 @@ export function convertMarginBucketToBps(bucketString) {
       return bucketString; // Return original if parsing fails
     }
     
-    return `${Math.round(min * 100)}-${Math.round(max * 100)}`;
+    // Convert both positive and negative values to basis points
+    const minBps = Math.round(min * 100);
+    const maxBps = Math.round(max * 100);
+    
+    // Format as basis points range
+    return `${minBps}-${maxBps}`;
   } catch (error) {
     console.error('Error converting margin bucket to BPS:', error);
     return bucketString; // Return original on error

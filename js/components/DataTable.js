@@ -6,6 +6,9 @@
  * with support for sorting, filtering, and formatting of mortgage data.
  */
 
+import { comparePremiumBands, standardizePremiumBand } from '../utils/sortUtils.js';
+import { formatCurrency, formatPercentage } from '../utils/formatUtils.js';
+
 export class DataTable {
   /**
    * Create a new DataTable instance
@@ -23,41 +26,7 @@ export class DataTable {
     this.stateManager.subscribe('ui.selectedPremiumBands', () => this.render());
   }
   
-  /**
-   * Format currency values in millions of pounds
-   * @param {number} value - Value to format
-   * @param {boolean} includeSymbol - Whether to include £ symbol
-   * @returns {string} Formatted currency string
-   * @private
-   */
-  formatCurrency(value, includeSymbol = true) {
-    if (value === null || value === undefined || isNaN(value)) {
-      return '-';
-    }
-    
-    // Convert to millions
-    const inMillions = value / 1000000;
-    
-    // Format with 2 decimal places
-    const formatted = inMillions.toFixed(2);
-    
-    // Add symbol if requested
-    return includeSymbol ? `£${formatted}m` : `${formatted}m`;
-  }
-  
-  /**
-   * Format percentage values
-   * @param {number} value - Value to format
-   * @returns {string} Formatted percentage string
-   * @private
-   */
-  formatPercentage(value) {
-    if (value === null || value === undefined || isNaN(value)) {
-      return '-';
-    }
-    
-    return `${value.toFixed(2)}%`;
-  }
+  // Using centralized formatUtils.js instead of local formatting methods
   
   /**
    * Create column definitions for the table
@@ -73,7 +42,8 @@ export class DataTable {
         field: "premiumBand",
         headerSort: true,
         frozen: true,
-        headerFilter: true
+        headerFilter: true,
+        sorter: comparePremiumBands
       }
     ];
     
@@ -86,7 +56,7 @@ export class DataTable {
         title: displayMonth,
         field: `amount.${month}`,
         headerSort: true,
-        formatter: cell => this.formatCurrency(cell.getValue()),
+        formatter: cell => formatCurrency(cell.getValue()),
         sorter: "number",
         hozAlign: "right"
       });
@@ -110,7 +80,7 @@ export class DataTable {
       title: "Total",
       field: "total",
       headerSort: true,
-      formatter: cell => this.formatCurrency(cell.getValue()),
+      formatter: cell => formatCurrency(cell.getValue()),
       sorter: "number",
       hozAlign: "right",
       headerFilter: true
@@ -121,7 +91,7 @@ export class DataTable {
       title: "Market Share",
       field: "marketShare",
       headerSort: true,
-      formatter: cell => this.formatPercentage(cell.getValue()),
+      formatter: cell => formatPercentage(cell.getValue()),
       sorter: "number",
       hozAlign: "right"
     });
@@ -157,10 +127,15 @@ export class DataTable {
     const { premiumBands, months, data, totals } = aggregatedData;
     const tableData = [];
     
-    // Create a row for each premium band
+    // Create a row for each premium band, filtering out 'Unknown'
     premiumBands.forEach(band => {
+      // Skip the 'Unknown' and '-0.4--0.2' premium bands
+      if (band === 'Unknown' || band === '-0.4--0.2') return;
+      // Standardize premium band format (convert decimal to basis points if needed)
+      const standardizedBand = standardizePremiumBand(band);
+      
       const row = {
-        premiumBand: band,
+        premiumBand: standardizedBand,
         amount: {},
         count: {},
         total: totals.byPremiumBand[band] || 0,

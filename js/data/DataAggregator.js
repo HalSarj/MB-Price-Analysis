@@ -4,6 +4,7 @@
  */
 
 import { COLUMN_MAP, convertMarginBucketToBps } from './ColumnMapper.js';
+import { sortPremiumBands } from '../utils/sortUtils.js';
 
 // Helper function to generate all months in a date range
 function getAllMonthsInRange(startDateString, endDateString) {
@@ -101,16 +102,7 @@ export class DataAggregator {
         if (r.PremiumBand) bandSet.set(r.PremiumBand, true);
       });
       
-      const bands = Array.from(bandSet.keys())
-        .sort((a, b) => {
-          try {
-            const aNum = parseInt(a.split('-')[0]) || 0;
-            const bNum = parseInt(b.split('-')[0]) || 0;
-            return aNum - bNum;
-          } catch (e) {
-            return 0; // If parsing fails, don't change order
-          }
-        });
+      const bands = sortPremiumBands(Array.from(bandSet.keys()));
       
       // Determine the list of months for the report
       let effectiveMonths;

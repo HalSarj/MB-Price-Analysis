@@ -7,6 +7,7 @@
  */
 
 import { COLUMN_MAP, formatDate } from '../data/ColumnMapper.js';
+import { sortPremiumBands } from '../utils/sortUtils.js';
 
 export class FilterManager {
   /**
@@ -355,7 +356,7 @@ export class FilterManager {
       return {
         lenders: Array.from(lenders).sort(),
         purchaseTypes: Array.from(purchaseTypes).sort(),
-        premiumBands: Array.from(premiumBandsSet).sort(),
+        premiumBands: sortPremiumBands(Array.from(premiumBandsSet)),
         ltvRanges: this.getDefaultFilterOptions().ltvRanges,
         dateRange: this.getDefaultFilterOptions().dateRange
       };

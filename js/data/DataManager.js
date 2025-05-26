@@ -9,6 +9,7 @@
 import { DataLoader } from './DataLoader.js';
 import { DataAggregator } from './DataAggregator.js';
 import { COLUMN_MAP, convertMarginBucketToBps } from './ColumnMapper.js';
+import { sortPremiumBands, standardizePremiumBand } from '../utils/sortUtils.js';
 
 export class DataManager {
   /**
@@ -112,6 +113,11 @@ export class DataManager {
       // Add PremiumBand if missing
       if (record.GrossMarginBucket && !record.PremiumBand) {
         record.PremiumBand = convertMarginBucketToBps(record.GrossMarginBucket);
+      }
+      
+      // Standardize premium band format (convert decimal to basis points)
+      if (record.PremiumBand) {
+        record.PremiumBand = standardizePremiumBand(record.PremiumBand);
       }
       
       // Validate and normalize date format
@@ -329,6 +335,9 @@ export class DataManager {
     if (!data || !filters) return data || [];
     
     return data.filter(record => {
+      // Always filter out Unknown and -0.4--0.2 premium bands
+      if (record.PremiumBand === 'Unknown' || record.PremiumBand === '-0.4--0.2') return false;
+      
       // Date range filter
       if (filters.dateRange && filters.dateRange[0] && filters.dateRange[1]) {
         const recordDate = record[COLUMN_MAP.documentDate]; // This is now a Date object (or Invalid Date)
