@@ -52,8 +52,62 @@ document.addEventListener('DOMContentLoaded', async () => {
       stateManager
     );
 
-    // Initialize view tabs
-    initializeViewTabs();
+    // Define initializeViewTabs INSIDE this scope so it has access to dataTableView
+    function initializeViewTabs() { 
+      const viewTabs = document.querySelectorAll('.view-tab');
+      const viewPanels = document.querySelectorAll('.view-panel');
+
+      viewTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const targetView = tab.getAttribute('data-view');
+          console.log(`[App] Tab clicked. Target view: ${targetView}`); 
+
+          // Update active tab
+          viewTabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+
+          // Show corresponding panel
+          viewPanels.forEach(panel => {
+            const wasHidden = panel.classList.contains('hidden'); 
+            
+            const comparisonTarget = `${targetView}-view`;
+            
+            if (panel.id === comparisonTarget) {
+              panel.classList.remove('hidden');
+              console.log(`[App] Panel ${panel.id} activated. Was hidden: ${wasHidden}, Now hidden: ${panel.classList.contains('hidden')}`);
+
+              if (panel.id === 'data-table-view') {
+                if (dataTableView) { 
+                  if (typeof dataTableView.activateView === 'function') {
+                    dataTableView.activateView();
+                  } else {
+                    console.error(`[App] CRITICAL ERROR: dataTableView exists but activateView is NOT a function!`);
+                  }
+                } else {
+                  console.error(`[App] CRITICAL ERROR: dataTableView is undefined or null! Cannot call activateView.`);
+                }
+              }
+            } else {
+              // Only add 'hidden' if it's not the target panel AND it wasn't already hidden
+              if (!panel.classList.contains('hidden')) {
+                 panel.classList.add('hidden');
+              }
+            }
+          });
+          
+          // Special case for market share view - show premium band selector
+          const premiumBandSelector = document.getElementById('premium-band-selector');
+          if (targetView === 'market-share') {
+            premiumBandSelector.classList.remove('hidden');
+          } else {
+            premiumBandSelector.classList.add('hidden');
+          }
+        });
+      });
+    }
+
+    // Call the now-locally-defined initializeViewTabs
+    initializeViewTabs(); 
 
     // Add export button functionality
     document.getElementById('export-data').addEventListener('click', () => {
@@ -126,37 +180,3 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
   }
 });
-
-/**
- * Initialize view tab switching functionality
- */
-function initializeViewTabs() {
-  const viewTabs = document.querySelectorAll('.view-tab');
-  const viewPanels = document.querySelectorAll('.view-panel');
-  
-  viewTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const targetView = tab.getAttribute('data-view');
-      
-      // Update active tab
-      viewTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      
-      // Show corresponding panel
-      viewPanels.forEach(panel => {
-        panel.classList.add('hidden');
-        if (panel.id === `${targetView}-view`) {
-          panel.classList.remove('hidden');
-        }
-      });
-      
-      // Special case for market share view - show premium band selector
-      const premiumBandSelector = document.getElementById('premium-band-selector');
-      if (targetView === 'market-share') {
-        premiumBandSelector.classList.remove('hidden');
-      } else {
-        premiumBandSelector.classList.add('hidden');
-      }
-    });
-  });
-}

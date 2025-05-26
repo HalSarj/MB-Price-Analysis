@@ -22,6 +22,10 @@ export class DataManager {
     this.processedData = null;
     this.isLoading = false;
     this.lastUpdated = null;
+    this.unfilteredTotals = {
+      byPremiumBand: {},
+      overall: 0
+    };
   }
   
   /**
@@ -250,8 +254,25 @@ export class DataManager {
       data = this.stateManager.state.data.raw || [];
     }
     
-    if (data.length === 0) {
-      console.warn('Data for aggregation is empty.');
+    const filterPremiumBandsLogic = record => {
+      if (record.PremiumBand === 'Unknown' || record.PremiumBand === '-0.4--0.2') return false;
+      if (record.PremiumBand) {
+        const parts = String(record.PremiumBand).split('-'); // Ensure it's a string
+        if (parts.length >= 1) {
+          const lowerBoundString = parts[0].trim();
+          const lowerBound = parseFloat(lowerBoundString);
+          if (!isNaN(lowerBound) && lowerBound >= 540) {
+            return false; // Exclude if lower bound is 540 or more
+          }
+        }
+      }
+      return true;
+    };
+
+    const filteredDataForAggregation = data.filter(filterPremiumBandsLogic);
+    
+    if (filteredDataForAggregation.length === 0) {
+      console.warn('Data for aggregation is empty after premium band filtering.');
       this.stateManager.setState('data.aggregated', null); // Clear aggregated data
       return null;
     }
@@ -270,11 +291,40 @@ export class DataManager {
     };
     
     // Log aggregation start
-    console.info(`Starting data aggregation with ${data.length} records`);
+    console.info(`Starting data aggregation with ${filteredDataForAggregation.length} records (after premium band filter)`);
     const startTime = performance.now();
     
+    // Calculate unfiltered totals for market share calculation if we have date range filters
+    // but no other filters applied
+    if (filterDateRange && this.rawData.length > 0) {
+      // Apply only date range filter to get the total for each premium band
+      let dateFilteredRawData = this.rawData.filter(record => {
+        const recordDate = new Date(record[COLUMN_MAP.documentDate]);
+        return recordDate >= filterDateRange[0] && recordDate <= filterDateRange[1];
+      });
+
+      dateFilteredRawData = dateFilteredRawData.filter(filterPremiumBandsLogic);
+      
+      // Calculate totals by premium band for the date range
+      this.unfilteredTotals = { byPremiumBand: {}, overall: 0 };
+      dateFilteredRawData.forEach(record => {
+        const band = record.PremiumBand;
+        const amount = parseFloat(record[COLUMN_MAP.loanAmount]) || 0;
+        
+        if (band) {
+          this.unfilteredTotals.byPremiumBand[band] = (this.unfilteredTotals.byPremiumBand[band] || 0) + amount;
+          this.unfilteredTotals.overall += amount;
+        }
+      });
+      
+      console.debug('[DataManager] Calculated unfiltered totals for market share (after premium band filter):', this.unfilteredTotals);
+    }
+    
     // Perform aggregation
-    const aggregatedData = DataAggregator.aggregateByPremiumBandAndMonth(data, aggregationOptions);
+    const aggregatedData = DataAggregator.aggregateByPremiumBandAndMonth(filteredDataForAggregation, aggregationOptions);
+    
+    // Add unfiltered totals to the aggregated data for market share calculation
+    aggregatedData.unfilteredTotals = this.unfilteredTotals;
     
     // Update state
     this.stateManager.setState('data.aggregated', aggregatedData);
@@ -292,12 +342,13 @@ export class DataManager {
    * @returns {Array} Filtered data
    */
   applyFilters(filters) {
-    // Ensure processedData is available, otherwise use rawData
-    const dataToFilter = this.processedData || this.rawData;
-    if (!dataToFilter || dataToFilter.length === 0) {
-      // console.warn('No data available to apply filters.'); // Avoid excessive warning
+    if (!this.rawData || this.rawData.length === 0) {
+      console.warn('Cannot apply filters: No raw data available');
       return [];
     }
+    
+    // Store filters in state
+    this.stateManager.setState('filters', filters);
     
     // Log the filters being applied
     const loggableFilters = {};
@@ -314,11 +365,15 @@ export class DataManager {
       });
     }
     console.debug('[DataManager.applyFilters] Applying filters:', JSON.stringify(loggableFilters));
-
-    const filteredData = this.filterData(dataToFilter, filters);
+    
+    // Apply filters to raw data
+    const filteredData = this.filterData(this.rawData, filters);
+    console.info(`Applied filters: ${filteredData.length} records match criteria`);
+    
+    // Store filtered data in state
     this.stateManager.setState('data.filtered', filteredData);
     
-    // Re-aggregate with filtered data
+    // Aggregate filtered data
     this.aggregateData(filteredData);
     
     return filteredData;
@@ -332,11 +387,37 @@ export class DataManager {
    * @private
    */
   filterData(data, filters) {
+    console.log(`[DataManager.filterData ENTRY] Called. ${data ? data.length : '0'} records. First PremiumBand: ${data && data[0] ? data[0].PremiumBand : 'N/A'}. Filters:`, JSON.stringify(filters));
+
     if (!data || !filters) return data || [];
     
     return data.filter(record => {
       // Always filter out Unknown and -0.4--0.2 premium bands
       if (record.PremiumBand === 'Unknown' || record.PremiumBand === '-0.4--0.2') return false;
+      
+      // Filter out premium bands where the lower bound is >= 540
+      if (record.PremiumBand) {
+        // Direct log for a specific problematic band
+        if (record.PremiumBand === '540-560') {
+          console.log(`[DataManager.filterData] Encountered '540-560' directly.`);
+        }
+
+        const parts = record.PremiumBand.split('-');
+        if (parts.length >= 1) {
+          const lowerBoundString = parts[0].trim();
+          const lowerBound = parseFloat(lowerBoundString);
+
+          if (!isNaN(lowerBound)) {
+            if (lowerBound >= 540) {
+              console.log(`[DataManager.filterData] Attempting to EXCLUDE band: ${record.PremiumBand}, Parsed Lower bound: ${lowerBound}`);
+              return false; // Exclude if lower bound is 540 or more
+            }
+          } else {
+            // Log if parsing to float results in NaN
+            console.log(`[DataManager.filterData] NaN for band: ${record.PremiumBand}, lowerBoundString: '${lowerBoundString}'`);
+          }
+        }
+      }
       
       // Date range filter
       if (filters.dateRange && filters.dateRange[0] && filters.dateRange[1]) {
@@ -377,7 +458,15 @@ export class DataManager {
       
       // Purchase type filter
       if (filters.purchaseTypes && filters.purchaseTypes.length > 0) {
-        if (!filters.purchaseTypes.includes(record[COLUMN_MAP.purchaseType])) {
+        // Debug logging for purchase type filter
+        if (record.id && record.id < 5) { // Only log a few records to avoid console spam
+          console.log(`[DataManager.filterData] Purchase type check - Record: ${record.id}, PurchaseType: '${record[COLUMN_MAP.purchaseType]}', Allowed types:`, filters.purchaseTypes);
+        }
+        
+        // Skip 'all_purchase_types' as it's a UI-only value
+        if (filters.purchaseTypes.includes('all_purchase_types')) {
+          // If 'all_purchase_types' is selected, don't filter by purchase type
+        } else if (!filters.purchaseTypes.includes(record[COLUMN_MAP.purchaseType])) {
           return false;
         }
       }

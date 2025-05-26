@@ -57,38 +57,46 @@ export class DataTableView {
     // Initial render
     this.updateTable();
   }
-  
+
+  /**
+   * Activates the view, ensuring the table is rendered.
+   * Called when the tab for this view becomes active.
+   */
+  activateView() {
+    console.log(`[DataTableView] activateView called. isInitialized: ${this.isInitialized}`);
+    if (this.isInitialized) {
+      this.updateTable(); // This will call DataTable.render()
+      
+      if (this.dataTable) {
+        console.log(`[DataTableView] Scheduling forceRedraw. DataTable component exists.`);
+        // Defer the forceRedraw to allow the browser to update the layout
+        // and for Tabulator to fully initialize in the now-visible container.
+        requestAnimationFrame(() => {
+          const isPanelHidden = this.container ? this.container.classList.contains('hidden') : 'N/A_container_null';
+          const dataTableExists = !!this.dataTable;
+          console.log(`[DataTableView] rAF callback. dataTable exists: ${dataTableExists}, panel hidden: ${isPanelHidden}`);
+          // Check if the component is still mounted and the panel is visible,
+          // as the user might have quickly navigated away again.
+          if (this.dataTable && this.container && !this.container.classList.contains('hidden')) {
+            console.log('[DataTableView] rAF: Conditions met, calling forceRedraw.');
+            this.dataTable.forceRedraw();
+          } else {
+            console.log('[DataTableView] rAF: Conditions NOT met for forceRedraw.');
+          }
+        });
+      } else {
+        console.log(`[DataTableView] activateView: this.dataTable is null.`);
+      }
+    }
+  }
+
   /**
    * Create view controls for switching between aggregated and raw data views
    * @private
    */
   createViewControls() {
-    const controlsContainer = document.createElement('div');
-    controlsContainer.className = 'table-view-controls';
-    
-    // Create view toggle buttons
-    const aggregatedButton = document.createElement('button');
-    aggregatedButton.className = 'btn btn-primary active';
-    aggregatedButton.textContent = 'Aggregated View';
-    aggregatedButton.addEventListener('click', () => this.switchView('aggregated'));
-    
-    const rawButton = document.createElement('button');
-    rawButton.className = 'btn btn-secondary';
-    rawButton.textContent = 'Raw Data View';
-    rawButton.addEventListener('click', () => this.switchView('raw'));
-    
-    // Store references to buttons
-    this.viewButtons = {
-      aggregated: aggregatedButton,
-      raw: rawButton
-    };
-    
-    // Add buttons to controls container
-    controlsContainer.appendChild(aggregatedButton);
-    controlsContainer.appendChild(rawButton);
-    
-    // Add controls to main container
-    this.container.appendChild(controlsContainer);
+    // View controls have been removed as requested
+    // The view is now permanently set to 'aggregated'
   }
   
   /**

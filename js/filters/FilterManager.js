@@ -104,7 +104,8 @@ export class FilterManager {
       this.activeFilters.add('dateRange');
     }
     
-    if (filters.lenders && filters.lenders.length > 0) {
+    // Only consider lenders filter active if there are selected lenders and 'all_lenders' is not among them
+    if (filters.lenders && filters.lenders.length > 0 && !filters.lenders.includes('all_lenders')) {
       this.activeFilters.add('lenders');
     }
     
@@ -112,11 +113,10 @@ export class FilterManager {
       this.activeFilters.add('ltvRange');
     }
     
-    if (filters.premiumBands && filters.premiumBands.length > 0) {
-      this.activeFilters.add('premiumBands');
-    }
+    // Premium bands filter is no longer used
     
-    if (filters.purchaseTypes && filters.purchaseTypes.length > 0) {
+    // Only consider purchase types filter active if there are selected types and 'all_purchase_types' is not among them
+    if (filters.purchaseTypes && filters.purchaseTypes.length > 0 && !filters.purchaseTypes.includes('all_purchase_types')) {
       this.activeFilters.add('purchaseTypes');
     }
     
@@ -135,109 +135,92 @@ export class FilterManager {
     if (!data || !Array.isArray(data)) return [];
     if (!filters) return data;
 
-    console.debug('[FilterManager.filterData] Entered filterData. Filters object:', JSON.stringify(filters));
-
-    let normalizedStartDate = null;
-    let normalizedEndDate = null;
-
-    const dateRangeIsActive = this.activeFilters.has('dateRange');
-    console.debug('[FilterManager.filterData] Is dateRange active?', dateRangeIsActive);
-
-    if (dateRangeIsActive && filters.dateRange && filters.dateRange.length === 2) {
-      const startDate = filters.dateRange[0];
-      const endDate = filters.dateRange[1];
-
-      if (startDate instanceof Date && !isNaN(startDate)) {
-        normalizedStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      }
-      if (endDate instanceof Date && !isNaN(endDate)) {
-        normalizedEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
-      }
-
-      console.debug('[FilterManager.filterData] Date Range for filtering:', 
-        'Start:', normalizedStartDate?.toISOString(), 
-        'End:', normalizedEndDate?.toISOString()
-      );
+    // Apply each filter in sequence
+    let filteredData = [...data]; // Create a copy to avoid modifying original
+    
+    // Date range filter
+    if (this.activeFilters.has('dateRange') && filters.dateRange && 
+        filters.dateRange[0] && filters.dateRange[1]) {
+      const startDate = new Date(filters.dateRange[0]);
+      const endDate = new Date(filters.dateRange[1]);
+      
+      // Set time to include the entire day
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+      
+      filteredData = filteredData.filter(record => {
+        const recordDate = new Date(record[COLUMN_MAP.documentDate]);
+        return recordDate >= startDate && recordDate <= endDate;
+      });
     }
     
-    return data.filter(record => {
-      // Date range filter
-      if (this.activeFilters.has('dateRange')) {
-        const recordDate = record[COLUMN_MAP.documentDate]; // This is now a Date object (or Invalid Date)
-
-        // Check if recordDate is a valid Date object
-        if (!(recordDate instanceof Date) || isNaN(recordDate.getTime())) {
-          return false; // Skip if record date is invalid or not a Date object
-        }
-
-        // Apply date range filtering if filter dates are valid
-        // normalizedStartDate and normalizedEndDate are already Date objects (or null)
-        if (normalizedStartDate && recordDate < normalizedStartDate) return false;
-        if (normalizedEndDate && recordDate > normalizedEndDate) return false;
-        // If normalizedStartDate or normalizedEndDate is null (due to invalid input filter),
-        // those specific checks (start or end) won't apply. If both are null,
-        // no date range filtering occurs, but the record must still have a valid date.
-      }
-      
-      // Lender filter
-      if (this.activeFilters.has('lenders')) {
-        const lender = record[COLUMN_MAP.lender];
-        if (!lender || !filters.lenders.includes(lender)) {
-          return false;
-        }
-      }
-      
-      // LTV range filter
-      if (this.activeFilters.has('ltvRange')) {
+    // Lender filter - only apply if 'all_lenders' is not selected
+    if (this.activeFilters.has('lenders') && filters.lenders && 
+        filters.lenders.length > 0 && !filters.lenders.includes('all_lenders')) {
+      filteredData = filteredData.filter(record => {
+        return filters.lenders.includes(record[COLUMN_MAP.lender]);
+      });
+    }
+    
+    // LTV range filter
+    if (this.activeFilters.has('ltvRange') && filters.ltvRange && filters.ltvRange !== 'all') {
+      filteredData = filteredData.filter(record => {
         const ltv = parseFloat(record[COLUMN_MAP.ltv]);
+        
         if (isNaN(ltv)) return false;
         
         switch (filters.ltvRange) {
           case 'below-80':
-            if (ltv >= 80) return false;
-            break;
+            return ltv < 80;
           case 'above-80':
-            if (ltv < 80) return false;
-            break;
+            return ltv >= 80;
           case 'above-85':
-            if (ltv < 85) return false;
-            break;
+            return ltv >= 85;
           case 'above-90':
-            if (ltv < 90) return false;
-            break;
-          case 'above-95':
-            if (ltv < 95) return false;
-            break;
-          // default 'all' case or unrecognized values will not filter by LTV
+            return ltv >= 90;
+          default:
+            return true;
         }
-      }
+      });
+    }
+    
+    // Purchase types filter - only apply if 'all_purchase_types' is not selected
+    if (this.activeFilters.has('purchaseTypes') && filters.purchaseTypes && 
+        filters.purchaseTypes.length > 0 && !filters.purchaseTypes.includes('all_purchase_types')) {
+      console.log(`[FilterManager.filterData] Applying purchase type filter with values:`, filters.purchaseTypes);
       
-      // Premium bands filter
-      if (this.activeFilters.has('premiumBands')) {
-        const premiumBand = record[COLUMN_MAP.premiumBand];
-        if (!premiumBand || !filters.premiumBands.includes(premiumBand)) {
-          return false;
+      // Log the first few unique purchase types found in the data for debugging
+      const uniquePurchaseTypes = new Set();
+      filteredData.slice(0, 100).forEach(record => {
+        if (record[COLUMN_MAP.purchaseType]) {
+          uniquePurchaseTypes.add(record[COLUMN_MAP.purchaseType]);
         }
-      }
+      });
+      console.log(`[FilterManager.filterData] Unique purchase types in data:`, Array.from(uniquePurchaseTypes));
       
-      // Purchase types filter
-      if (this.activeFilters.has('purchaseTypes')) {
+      filteredData = filteredData.filter(record => {
         const purchaseType = record[COLUMN_MAP.purchaseType];
-        if (!purchaseType || !filters.purchaseTypes.includes(purchaseType)) {
-          return false;
+        const included = filters.purchaseTypes.includes(purchaseType);
+        
+        // Log some sample records for debugging
+        if (record.id && record.id < 5) {
+          console.log(`[FilterManager.filterData] Record ${record.id} purchase type '${purchaseType}' ${included ? 'matches' : 'does not match'} filter`);
         }
-      }
+        
+        return included;
+      });
       
-      return true; // Record passes all active filters
-    });
+      console.log(`[FilterManager.filterData] After purchase type filter: ${filteredData.length} records remain`);
+    }
+    
+    return filteredData;
   }
   
   /**
-   * Get unique filter options from data
-   * @param {Array} data - Data to extract options from
-   * @param {string} columnKey - Key from COLUMN_MAP
-   * @returns {Array} Unique sorted options
-   * @private
+   * Update the filter
+   * @param {string} filterName - Name of the filter to update
+   * @param {*} value - New value for the filter
+   * @returns {boolean} True if the filter was updated successfully, false otherwise
    */
   updateFilter(filterName, value) {
     try {
@@ -260,7 +243,17 @@ export class FilterManager {
    * Reset all filters to default values
    */
   resetFilters() {
-    this.stateManager.resetState('filters');
+    const defaultOptions = this.getDefaultFilterOptions();
+    
+    this.stateManager.setState('filters', {
+      dateRange: [defaultOptions.dateRange.min, defaultOptions.dateRange.max],
+      lenders: ['all_lenders'], // Select 'All Lenders' by default
+      ltvRange: 'all',
+      purchaseTypes: ['all_purchase_types'] // Select 'All Purchase Types' by default
+    });
+    
+    // Reset the UI state for filters
+    this.stateManager.setState('ui.filtersChangedPendingApply', true);
   }
   
   /**
@@ -379,9 +372,8 @@ export class FilterManager {
     const maxDate = new Date('2025-05-31');
     
     return {
-      lenders: [],
-      purchaseTypes: [],
-      premiumBands: [],
+      lenders: ['all_lenders'],
+      purchaseTypes: ['all_purchase_types'],
       ltvRanges: [
         { value: 'all', label: 'All LTV' },
         { value: 'below-80', label: 'Below 80%' },

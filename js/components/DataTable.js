@@ -20,6 +20,7 @@ export class DataTable {
     this.stateManager = stateManager;
     this.table = null;
     this.isRendering = false;
+    this.isTabulatorBuilt = false; // New property
     
     // Subscribe to relevant state changes
     this.stateManager.subscribe('data.aggregated', () => this.render());
@@ -124,7 +125,7 @@ export class DataTable {
   transformDataForTable(aggregatedData) {
     if (!aggregatedData) return [];
     
-    const { premiumBands, months, data, totals } = aggregatedData;
+    const { premiumBands, months, data, totals, unfilteredTotals } = aggregatedData;
     const tableData = [];
     
     // Create a row for each premium band, filtering out 'Unknown'
@@ -134,12 +135,23 @@ export class DataTable {
       // Standardize premium band format (convert decimal to basis points if needed)
       const standardizedBand = standardizePremiumBand(band);
       
+      // Calculate market share as percentage of total lending in this price premium bucket
+      let marketShare = 100; // Default to 100% if no unfiltered totals available
+      
+      if (unfilteredTotals && unfilteredTotals.byPremiumBand && unfilteredTotals.byPremiumBand[band] > 0) {
+        // Market share = (filtered amount for this band / unfiltered amount for this band) * 100
+        marketShare = ((totals.byPremiumBand[band] || 0) / unfilteredTotals.byPremiumBand[band]) * 100;
+      } else if (totals.overall > 0) {
+        // Fallback to old calculation if unfiltered totals not available
+        marketShare = ((totals.byPremiumBand[band] || 0) / totals.overall) * 100;
+      }
+      
       const row = {
         premiumBand: standardizedBand,
         amount: {},
         count: {},
         total: totals.byPremiumBand[band] || 0,
-        marketShare: ((totals.byPremiumBand[band] || 0) / totals.overall) * 100
+        marketShare: marketShare
       };
       
       // Add data for each month
@@ -162,7 +174,8 @@ export class DataTable {
       amount: {},
       count: {},
       total: totals.overall,
-      marketShare: 100
+      marketShare: unfilteredTotals && unfilteredTotals.overall > 0 ? 
+        (totals.overall / unfilteredTotals.overall) * 100 : 100
     };
     
     months.forEach(month => {
@@ -183,128 +196,58 @@ export class DataTable {
     if (this.isRendering) return;
     this.isRendering = true;
     
+    console.log('[DataTable] render called.'); // New Log
     try {
       // Get aggregated data from state
       const aggregatedData = this.stateManager.getState('data.aggregated');
       
       if (!aggregatedData || !aggregatedData.premiumBands || !aggregatedData.months) {
+        console.log('[DataTable] render: No aggregated data or missing properties. Displaying "No data" message.'); // New Log
         this.container.innerHTML = '<div class="no-data-message">No data available for display</div>';
         this.isRendering = false;
         return;
       }
       
-      // Log available months for debugging
-      console.info('Rendering table with months:', aggregatedData.months);
-      
-      // Clear container
-      this.container.innerHTML = '';
-      
-      // Create month selector
-      const yearSelector = document.createElement('div');
-      yearSelector.className = 'year-selector';
-      yearSelector.innerHTML = '<label>Filter by Year: </label>';
-      
-      // Get unique years from months
-      const years = [...new Set(aggregatedData.months.map(month => month.split('-')[0]))].sort();
-      
-      // Create year buttons
-      const allYearsBtn = document.createElement('button');
-      allYearsBtn.textContent = 'All Years';
-      allYearsBtn.className = 'btn btn-primary year-btn active';
-      allYearsBtn.dataset.year = 'all';
-      yearSelector.appendChild(allYearsBtn);
-      
-      years.forEach(year => {
-        const yearBtn = document.createElement('button');
-        yearBtn.textContent = year;
-        yearBtn.className = 'btn btn-secondary year-btn';
-        yearBtn.dataset.year = year;
-        yearSelector.appendChild(yearBtn);
-      });
-      
-      this.container.appendChild(yearSelector);
-      
-      // Create table element
-      const tableElement = document.createElement('div');
-      tableElement.className = 'data-table';
-      this.container.appendChild(tableElement);
-      
-      // Transform data for tabulator
-      const tableData = this.transformDataForTable(aggregatedData);
-      
-      // Create column definitions
-      const columns = this.createColumnDefinitions(aggregatedData.months);
-      
-      // Initialize tabulator
+      // If an old table instance exists, destroy it.
+      // Tabulator's destroy method should clean up its own DOM elements within this.container.
       if (this.table) {
         this.table.destroy();
+        this.table = null;
+        this.isTabulatorBuilt = false;
       }
-      
-      this.table = new Tabulator(tableElement, {
+
+      // Clear the container's content *before* initializing the new table directly into it.
+      this.container.innerHTML = ''; 
+
+      // Re-check for data after clearing, in case the "No data" message was the only thing.
+      if (!aggregatedData || !aggregatedData.premiumBands || !aggregatedData.months) {
+          this.container.innerHTML = '<div class="no-data-message">No data available for display</div>';
+          this.isRendering = false;
+          return;
+      }
+
+      const tableData = this.transformDataForTable(aggregatedData);
+      console.log('Rendering table with months:', aggregatedData.months); // Keep this log for now
+      const columnDefinitions = this.createColumnDefinitions(aggregatedData.months);
+
+      // Initialize Tabulator directly on this.container
+      this.table = new Tabulator(this.container, { // Changed from tableElement
         data: tableData,
-        columns: columns,
-        layout: "fitData", // Changed from fitDataTable to fitData
-        height: "400px", // Fixed height with scrolling
-        responsiveLayout: false, // Disable responsive layout
-        pagination: false,
-        headerSort: true,
-        rowFormatter: function(row) {
-          // Highlight total row
-          if (row.getData().premiumBand === "Total") {
-            row.getElement().classList.add("total-row");
+        columns: columnDefinitions,
+        layout: "fitData",  // Changed from fitColumns
+        placeholder: "No data available",
+        initialSort: [
+          { column: "premiumBand", dir: "asc" }
+        ],
+        rowFormatter: function(row){
+          if(row.getData().premiumBand === "Total"){
+            row.getElement().style.backgroundColor = "#CCE5FF"; 
+            row.getElement().style.fontWeight = "bold";
           }
         },
-        tooltips: true,
-        placeholder: "No Data Available",
-        movableColumns: true, // Allow column reordering
-        horizontalScrolling: true, // Enable horizontal scrolling
-        initialSort: [
-          {column: "premiumBand", dir: "asc"} // Sort by premium band initially
-        ]
       });
       
-      // Add year filter functionality
-      const yearBtns = yearSelector.querySelectorAll('.year-btn');
-      yearBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-          // Update button states
-          yearBtns.forEach(b => {
-            b.classList.remove('btn-primary', 'active');
-            b.classList.add('btn-secondary');
-          });
-          btn.classList.remove('btn-secondary');
-          btn.classList.add('btn-primary', 'active');
-          
-          const selectedYear = btn.dataset.year;
-          
-          // Filter columns based on selected year
-          if (selectedYear === 'all') {
-            // Show all columns
-            this.table.getColumns().forEach(column => {
-              const field = column.getField();
-              if (field && field.startsWith('amount.')) {
-                column.show();
-              }
-            });
-          } else {
-            // Show only columns for the selected year
-            this.table.getColumns().forEach(column => {
-              const field = column.getField();
-              if (field && field.startsWith('amount.')) {
-                const monthYear = field.replace('amount.', '');
-                if (monthYear.startsWith(selectedYear)) {
-                  column.show();
-                } else {
-                  column.hide();
-                }
-              }
-            });
-          }
-        });
-      });
-      
-      // Add download buttons
-      this.addExportButtons();
+      this.isTabulatorBuilt = true; 
       
     } catch (error) {
       console.error('Error rendering data table:', error);
@@ -319,86 +262,37 @@ export class DataTable {
    * @private
    */
   addExportButtons() {
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'table-actions';
+    // This method has been modified to not add buttons to the UI
+    // while preserving the functionality for potential future use
     
-    // CSV download button
-    const csvButton = document.createElement('button');
-    csvButton.className = 'btn btn-secondary';
-    csvButton.innerHTML = '<i class="fas fa-file-csv"></i> Export CSV';
-    csvButton.addEventListener('click', () => {
-      this.table.download("csv", "mortgage_data.csv");
-    });
+    // Export functionality is still available programmatically via:
+    // - this.table.download("csv", "mortgage_data.csv");
+    // - this.table.download("xlsx", "mortgage_data.xlsx");
     
-    // Excel download button
-    const excelButton = document.createElement('button');
-    excelButton.className = 'btn btn-secondary';
-    excelButton.innerHTML = '<i class="fas fa-file-excel"></i> Export Excel';
-    excelButton.addEventListener('click', () => {
-      this.table.download("xlsx", "mortgage_data.xlsx");
-    });
-    
-    // Toggle count columns button
-    const toggleCountButton = document.createElement('button');
-    toggleCountButton.className = 'btn btn-secondary';
-    toggleCountButton.innerHTML = '<i class="fas fa-list-ol"></i> Toggle Count Columns';
-    toggleCountButton.addEventListener('click', () => {
-      // Get all count columns
-      const countColumns = this.table.getColumns().filter(column => {
-        const field = column.getField();
-        return field && field.includes('count.');
-      });
-      
-      // Toggle visibility
-      const firstVisible = countColumns.length > 0 ? countColumns[0].isVisible() : false;
-      countColumns.forEach(column => {
-        column.toggle(!firstVisible);
-      });
-    });
-    
-    // Debug button to show data structure
-    const debugButton = document.createElement('button');
-    debugButton.className = 'btn btn-secondary';
-    debugButton.innerHTML = '<i class="fas fa-bug"></i> Debug Data';
-    debugButton.addEventListener('click', () => {
-      const aggregatedData = this.stateManager.getState('data.aggregated');
-      if (aggregatedData) {
-        console.log('Aggregated Data Structure:', aggregatedData);
-        console.log('Months available:', aggregatedData.months);
-        console.log('Premium Bands:', aggregatedData.premiumBands);
-        
-        // Create a debug panel
-        const debugPanel = document.createElement('div');
-        debugPanel.className = 'debug-panel';
-        debugPanel.innerHTML = `
-          <h3>Debug Information</h3>
-          <p><strong>Months available:</strong> ${aggregatedData.months.join(', ')}</p>
-          <p><strong>Premium Bands:</strong> ${aggregatedData.premiumBands.join(', ')}</p>
-          <p>Check browser console for full data structure</p>
-          <button class="btn btn-primary close-debug">Close</button>
-        `;
-        
-        // Add close button functionality
-        debugPanel.querySelector('.close-debug').addEventListener('click', () => {
-          debugPanel.remove();
-        });
-        
-        // Add to document
-        document.body.appendChild(debugPanel);
-      } else {
-        console.error('No aggregated data available');
-      }
-    });
-    
-    buttonContainer.appendChild(csvButton);
-    buttonContainer.appendChild(excelButton);
-    buttonContainer.appendChild(toggleCountButton);
-    buttonContainer.appendChild(debugButton);
-    
-    // Insert before the table
-    this.container.insertBefore(buttonContainer, this.container.firstChild);
+    // Count column toggling is still available programmatically via:
+    // const countColumns = this.table.getColumns().filter(column => {
+    //   const field = column.getField();
+    //   return field && field.includes('count.');
+    // });
+    // countColumns.forEach(column => column.toggle());
   }
   
+  /**
+   * Forces a redraw of the Tabulator table.
+   * Useful when the table becomes visible after being hidden.
+   */
+  forceRedraw() {
+    console.log(`[DataTable] forceRedraw called. Tabulator instance (this.table) exists: ${!!this.table}, isTabulatorBuilt: ${this.isTabulatorBuilt}`);
+    if (this.table && this.isTabulatorBuilt) { 
+      try {
+        this.table.redraw(true);
+        console.log('[DataTable] this.table.redraw(true) executed.'); // New Log
+      } catch (error) {
+        console.error('Error forcing redraw:', error);
+      }
+    }
+  }
+
   /**
    * Destroy the table instance and clean up
    */
@@ -406,6 +300,7 @@ export class DataTable {
     if (this.table) {
       this.table.destroy();
       this.table = null;
+      this.isTabulatorBuilt = false; // Reset isTabulatorBuilt
     }
   }
 }

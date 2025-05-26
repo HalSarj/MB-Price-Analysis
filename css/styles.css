@@ -1,5 +1,3 @@
-/* Mortgage Analysis Tool - Complete Styles */
-
 /* ========== CSS VARIABLES ========== */
 :root {
   /* Brand Colors */
@@ -156,7 +154,7 @@ body {
   background-color: var(--bg-secondary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  padding: var(--spacing-xl);
+  padding: var(--spacing-md);
 }
 
 /* ========== CONTROLS SECTION ========== */
@@ -166,12 +164,12 @@ body {
 
 /* ========== FILTER COMPONENTS ========== */
 .filters-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-lg);
+  padding: var(--spacing-xl);
   background: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
   box-shadow: var(--shadow-md);
 }
@@ -195,6 +193,28 @@ body {
 .filter-group {
   display: flex;
   flex-direction: column;
+  margin-bottom: var(--spacing-md);
+}
+
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--spacing-lg);
+  width: 100%;
+}
+
+.filter-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+}
+
+.btn-reset {
+  background-color: var(--bg-input);
+  color: var(--text-dark);
+  border: 1px solid var(--border-light);
 }
 
 .filter-group label {
@@ -219,7 +239,67 @@ body {
 
 .multi-select {
   height: auto;
-  min-height: 100px;
+  min-height: 120px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Custom multi-select styles */
+.custom-multi-select {
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-input);
+  max-height: 250px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.options-list {
+  padding: var(--spacing-md);
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: var(--radius-sm);
+}
+
+.option-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.option-item:last-child {
+  margin-bottom: 0;
+}
+
+.option-item input[type="checkbox"] {
+  margin-right: var(--spacing-md);
+  width: 18px;
+  height: 18px;
+}
+
+.option-item label {
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  font-weight: normal;
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.filter-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-hint);
+  font-weight: normal;
+  margin-left: var(--spacing-sm);
+}
+
+/* Highlight selected items */
+.option-item.selected {
+  background-color: var(--brand-blue-50);
 }
 
 .filter-group input,
@@ -361,29 +441,109 @@ body {
   margin-bottom: var(--spacing-lg);
 }
 
+.view-panel {
+  background-color: var(--bg-card); /* This provides the white background for each panel */
+  border-radius: var(--radius-lg); /* Rounded corners for each panel */
+  padding: var(--spacing-md); /* Default padding for view panels */
+  color: var(--text-dark); /* Text inside panels should be dark */
+  min-height: 400px; /* Ensure panels have some minimum height */
+}
+
 /* Data Table Specific */
+.views-section {
+  margin-top: var(--spacing-xl);
+}
+
+.view-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-dark);
+  margin-bottom: var(--spacing-lg);
+}
+
+.view-panel.hidden {
+  display: none;
+}
+
+/* Specific override for data-table-view */
 #data-table-view {
-  width: 100%;
-  overflow-x: auto;
+  background-color: var(--bg-card); /* Explicitly set, though inherited via .view-panel */
+  border-radius: var(--radius-lg);  /* Explicitly set, though inherited via .view-panel */
+  padding: 0; /* NO padding to make Tabulator flush */
+  color: var(--text-dark);
+  min-height: 450px; /* Ensure sufficient height, adjust if needed */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Clip content to rounded corners */
 }
 
-/* Ensure Tabulator tables can scroll horizontally */
+/* Ensure Tabulator itself takes up available space within #data-table-view */
+#data-table-view .tabulator {
+    width: 100%; 
+    flex-grow: 1; /* Make Tabulator fill the height */
+    border: none !important; /* Remove Tabulator's own border, forcefully */
+    border-radius: 0 !important; /* Remove Tabulator's own border-radius, forcefully */
+    background-color: transparent !important; /* Make Tabulator's main background transparent, forcefully */
+    box-shadow: none !important; /* Remove any Tabulator default shadows, forcefully */
+    padding: 0 !important; /* Ensure no internal padding */
+    margin: 0 !important; /* Ensure no external margin */
+}
+
+/* General Tabulator styling - some parts might be overridden by the above */
 .tabulator {
-  max-width: none !important; /* Override any max-width limitations */
+  /* border: 1px solid var(--border-light); -- Covered by #data-table-view .tabulator */
+  /* border-radius: var(--radius-md); -- Covered by #data-table-view .tabulator */
+  /* background-color: var(--bg-card); -- Covered by #data-table-view .tabulator */
+  overflow: auto; /* Ensure scrolling within Tabulator if content overflows */
 }
 
-.tabulator-tableHolder {
-  overflow-x: auto !important;
-  min-width: 100%;
+.tabulator .tabulator-header {
+  background-color: var(--bg-input); /* Light grey for header background */
+  border-bottom: 2px solid var(--border-light);
+  color: var(--text-dark);
+  font-weight: 600;
 }
 
-/* Ensure the Premium Band column stays visible when scrolling */
-.tabulator-frozen {
-  z-index: 10;
-  position: sticky;
-  left: 0;
-  background-color: var(--bg-card);
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+/* Specific for header within #data-table-view to match rounded corners */
+#data-table-view .tabulator .tabulator-header {
+  border-top-left-radius: var(--radius-lg); /* Match #data-table-view's radius */
+  border-top-right-radius: var(--radius-lg);
+  margin: 0 !important; /* Ensure no margin */
+}
+
+.tabulator .tabulator-header .tabulator-col {
+  padding: var(--spacing-sm) var(--spacing-md); /* RESTORED PADDING */
+  background-color: transparent; /* Keep transparent to show header bg */
+  border-right: 1px solid var(--border-light); /* Keep for column separation */
+  color: var(--text-dark); /* Ensure header text color */
+  font-weight: 600; /* Ensure header font weight */
+}
+
+.tabulator .tabulator-header .tabulator-col:last-child {
+    border-right: none; /* Remove border from the last column header */
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
+  background-color: rgba(0, 0, 0, 0.05); /* Subtle hover for sortable columns */
+}
+
+.tabulator .tabulator-tableholder { /* Holds the scrollable table data area */
+    background-color: var(--bg-card); /* Ensure data area background is white if needed */
+}
+
+/* Specific for tableholder within #data-table-view */
+#data-table-view .tabulator .tabulator-tableholder {
+    border-bottom-left-radius: var(--radius-lg); /* Match #data-table-view's radius */
+    border-bottom-right-radius: var(--radius-lg);
+    border-left: none !important; /* Ensure no side borders on the tableholder itself */
+    border-right: none !important;
+    border-bottom: none !important;
+    margin: 0 !important; /* Ensure no margin */
+    /* The top border is effectively the header's bottom border */
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row {
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-dark);
 }
 
 /* ========== BUTTON COMPONENTS ========== */

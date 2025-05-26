@@ -14,7 +14,8 @@ export class StateManager {
       filters: {
         dateRange: [null, null],
         lenders: [],
-        ltvRange: 'all'
+        ltvRange: 'all',
+        purchaseTypes: ['all_purchase_types']
       },
       ui: {
         loading: false,
@@ -159,7 +160,8 @@ export class StateManager {
         filters: {
           dateRange: [null, null],
           lenders: [],
-          ltvRange: 'all'
+          ltvRange: 'all',
+          purchaseTypes: ['all_purchase_types']
         },
         ui: {
           loading: false,
@@ -174,7 +176,8 @@ export class StateManager {
         'filters': {
           dateRange: [null, null],
           lenders: [],
-          ltvRange: 'all'
+          ltvRange: 'all',
+          purchaseTypes: ['all_purchase_types']
         },
         'ui': {
           loading: false,
