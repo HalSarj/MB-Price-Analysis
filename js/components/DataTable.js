@@ -22,9 +22,10 @@ export class DataTable {
     this.isRendering = false;
     this.isTabulatorBuilt = false; // New property
     
-    // Subscribe to relevant state changes
-    this.stateManager.subscribe('data.aggregated', () => this.render());
-    this.stateManager.subscribe('ui.selectedPremiumBands', () => this.render());
+    // Subscribe to relevant state changes that DataTable itself should react to independently.
+    // For example, if a filter that only affects Tabulator's internal filtering/display (not re-aggregation) changes.
+    // For now, we'll assume DataTableView orchestrates renders based on major data changes.
+    // this.stateManager.subscribe('ui.selectedPremiumBands', () => this.render()); // Temporarily removed
   }
   
   // Using centralized formatUtils.js instead of local formatting methods
@@ -213,31 +214,25 @@ export class DataTable {
       if (this.table) {
         this.table.destroy();
         this.table = null;
+        console.log('[DataTable] Destroyed existing table instance.');
         this.isTabulatorBuilt = false;
       }
 
-      // Clear the container's content *before* initializing the new table directly into it.
-      this.container.innerHTML = ''; 
-
-      // Re-check for data after clearing, in case the "No data" message was the only thing.
-      if (!aggregatedData || !aggregatedData.premiumBands || !aggregatedData.months) {
-          this.container.innerHTML = '<div class="no-data-message">No data available for display</div>';
-          this.isRendering = false;
-          return;
-      }
+      // Explicitly clear the container before re-initializing
+      this.container.innerHTML = '';
+      console.log('[DataTable] Cleared container HTML.');
 
       const tableData = this.transformDataForTable(aggregatedData);
       console.log('Rendering table with months:', aggregatedData.months); // Keep this log for now
       const columnDefinitions = this.createColumnDefinitions(aggregatedData.months);
 
-      // Initialize Tabulator directly on this.container
-      this.table = new Tabulator(this.container, { // Changed from tableElement
+      const tableOptions = {
         data: tableData,
+        layout: "fitData", 
+        placeholder: "No data available for display",
         columns: columnDefinitions,
-        layout: "fitData",  // Changed from fitColumns
-        placeholder: "No data available",
         initialSort: [
-          { column: "premiumBand", dir: "asc" }
+          { column: "premiumBand", dir: "asc" } 
         ],
         rowFormatter: function(row){
           if(row.getData().premiumBand === "Total"){
@@ -245,10 +240,36 @@ export class DataTable {
             row.getElement().style.fontWeight = "bold";
           }
         },
+        // Tabulator Debug Options
+        debugInvalidOptions: true,
+        debugInvalidComponentFuncs: true,
+        debugInitialization: true
+      };
+
+      console.log('[DataTable] Initializing Tabulator with options:', JSON.parse(JSON.stringify(tableOptions, (key, value) => 
+        typeof value === 'function' ? `Function: ${value.name || 'anonymous'}` : value
+      )));
+
+      this.table = new Tabulator(this.container, tableOptions);
+      
+      this.table.on("tableBuilt", () => {
+        console.log('[DataTable] Tabulator tableBuilt event via table.on()');
       });
-      
+
+      this.table.on("dataProcessed", () => {
+        console.log('[DataTable] Tabulator dataProcessed event via table.on()');
+      });
+
+      this.table.on("renderComplete", () => {
+        console.log('[DataTable] Tabulator renderComplete event via table.on()');
+        if (this.stateManager) {
+          this.stateManager.setState('ui.isApplyingFilters', false);
+          console.log('[DataTable] Set ui.isApplyingFilters to false via StateManager after renderComplete (table.on).');
+        }
+      });
+
       this.isTabulatorBuilt = true; 
-      
+      console.log('[DataTable] New Tabulator instance created and event listeners attached.');
     } catch (error) {
       console.error('Error rendering data table:', error);
       this.container.innerHTML = `<div class="error-message">Error rendering table: ${error.message}</div>`;

@@ -80,12 +80,10 @@ export class FilterManager {
       // Update UI state to reflect filtering is complete
       this.stateManager.setState('ui.filteringComplete', true);
       this.stateManager.setState('ui.filtersChangedPendingApply', false);
-      this.stateManager.setState('ui.isApplyingFilters', false);
       
       return dataToAggregate; // Return the data that was aggregated
     } catch (error) {
       console.error('Error applying filters:', error);
-      this.stateManager.setState('ui.isApplyingFilters', false); // Ensure spinner is hidden on error
       this.stateManager.setState('ui.filtersChangedPendingApply', false); // Reset pending state on error
       return [];
     }

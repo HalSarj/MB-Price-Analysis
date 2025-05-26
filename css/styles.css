@@ -474,6 +474,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden; /* Clip content to rounded corners */
+  position: relative; /* <<< ADDED THIS LINE FOR SPINNER POSITIONING */
 }
 
 /* Ensure Tabulator itself takes up available space within #data-table-view */
@@ -678,6 +679,31 @@ body {
   box-shadow: var(--shadow-md);
   overflow: auto; /* Changed from hidden to auto to enable scrolling */
   max-width: 100%;
+  position: relative;
+  min-height: 200px; /* Ensure container has some height even when table is empty for spinner to show */
+}
+
+/* Data View Specific Spinner Overlay */
+.data-view-spinner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.85); /* Original background */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 99999; /* Ensure it's above (almost) everything */
+  color: #333;
+  font-size: 1.1em;
+}
+
+.data-view-spinner-overlay .spinner {
+  /* Styles for the spinner itself are already defined globally */
+  margin-bottom: 15px; /* Space between spinner and text */
+  margin-right: 0; /* Override global margin-right for flex centering */
 }
 
 /* Year selector styles */

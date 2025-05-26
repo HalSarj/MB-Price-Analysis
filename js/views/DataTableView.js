@@ -24,12 +24,31 @@ export class DataTableView {
     this.rawDataTable = null;
     this.isInitialized = false;
     this.currentView = 'aggregated'; // 'aggregated' or 'raw'
+    this.spinnerElement = null; // Add a property to hold the spinner
+    this.viewContainer = this.container; // Assign this.viewContainer to the main container element
     
     // Subscribe to data changes
-    this.stateManager.subscribe('data.aggregated', () => {
+    this.stateManager.subscribe('data.aggregated', (aggregatedData) => {
       if (this.isInitialized) {
-        this.updateTable();
+        if (aggregatedData) {
+          console.log('[DataTableView] Received new aggregated data, calling this.dataTable.render().');
+          this.dataTable.render(aggregatedData); // This renders the new table
+          // DataTable's renderComplete event will now handle setting ui.isApplyingFilters to false.
+        } else {
+          // Handle case where aggregatedData is null (e.g., no data message)
+          console.log('[DataTableView] Received null aggregated data, calling this.dataTable.render(null).');
+          this.dataTable.render(null); // Or some method to clear/show 'no data'
+          // If there's no data to render, Tabulator might not fire renderComplete, so hide spinner directly.
+          this.stateManager.setState('ui.isApplyingFilters', false);
+          console.log('[DataTableView] Set ui.isApplyingFilters to false directly due to null aggregatedData.');
+        }
       }
+    });
+    
+    // Subscribe to filter application state
+    this.stateManager.subscribe('ui.isApplyingFilters', (isApplyingFilters) => {
+      console.log('[DataTableView] ui.isApplyingFilters state changed:', isApplyingFilters);
+      this.toggleSpinner(isApplyingFilters);
     });
     
     // Initialize the table
@@ -56,6 +75,90 @@ export class DataTableView {
     
     // Initial render
     this.updateTable();
+
+    // Set initial spinner state
+    this.toggleSpinner(this.stateManager.state.ui.isApplyingFilters || false);
+  }
+
+  /**
+   * Shows or hides a loading spinner within the data table view.
+   * @param {boolean} show - True to show the spinner, false to hide it.
+   */
+  ensureSpinnerElement() {
+    // Check if the spinner element exists and is in the document body
+    if (!this.spinnerElement || !document.body.contains(this.spinnerElement)) {
+      console.log('[DataTableView.ensureSpinnerElement] Spinner element needs creation or re-appending.');
+      
+      this.spinnerElement = document.createElement('div');
+      this.spinnerElement.className = 'data-view-spinner-overlay';
+      this.spinnerElement.innerHTML = '<div class="spinner"></div>';
+      this.spinnerElement.style.display = 'none'; // Ensure it's initially hidden if re-created
+      console.log('[DataTableView.ensureSpinnerElement] Spinner element created.');
+
+      if (this.viewContainer) {
+        this.viewContainer.appendChild(this.spinnerElement);
+        console.log('[DataTableView.ensureSpinnerElement] Spinner appended to viewContainer:', this.viewContainer);
+      } else {
+        console.error('[DataTableView.ensureSpinnerElement] viewContainer is null. Appending to document.body as fallback.');
+        document.body.appendChild(this.spinnerElement);
+      }
+    } else {
+      console.log('[DataTableView.ensureSpinnerElement] Spinner element already exists and is in DOM.');
+    }
+  }
+
+  toggleSpinner(show) {
+    console.log(`[DataTableView.toggleSpinner] Called with show: ${show}`);
+    this.ensureSpinnerElement();
+
+    if (!this.spinnerElement) {
+      console.error('[DataTableView.toggleSpinner] CRITICAL: this.spinnerElement is NULL after ensureSpinnerElement. Cannot proceed.');
+      return;
+    }
+    console.log('[DataTableView.toggleSpinner] this.spinnerElement is valid.');
+
+    if (!this.viewContainer || !this.viewContainer.contains(this.spinnerElement)) {
+      console.warn(`[DataTableView.toggleSpinner] Spinner not in designated viewContainer or viewContainer missing. Spinner in DOM: ${document.body.contains(this.spinnerElement)}. Attempting to fix.`);
+      if (this.viewContainer && document.body.contains(this.spinnerElement) && this.spinnerElement.parentElement !== this.viewContainer) {
+        console.log('[DataTableView.toggleSpinner] Moving spinner to viewContainer.');
+        this.viewContainer.appendChild(this.spinnerElement); // This moves it if it's elsewhere
+      } else if (this.viewContainer && !document.body.contains(this.spinnerElement)) {
+         console.log('[DataTableView.toggleSpinner] Spinner not in DOM, re-appending to viewContainer.');
+         this.viewContainer.appendChild(this.spinnerElement);
+      } else if (!this.viewContainer && document.body.contains(this.spinnerElement)) {
+        console.log('[DataTableView.toggleSpinner] viewContainer missing, spinner is on document.body (fallback).');
+      } else if (!this.viewContainer && !document.body.contains(this.spinnerElement)){
+        console.error('[DataTableView.toggleSpinner] viewContainer missing AND spinner not in DOM. Appending to body.');
+        document.body.appendChild(this.spinnerElement);
+      }
+    }
+
+    if (show) {
+      console.log('[DataTableView.toggleSpinner] Attempting to show spinner.');
+      this.spinnerElement.style.display = 'flex';
+      console.log(`[DataTableView.toggleSpinner] Spinner style.display SET TO: '${this.spinnerElement.style.display}'.`);
+      
+      const computedDisplay = window.getComputedStyle(this.spinnerElement).display;
+      console.log(`[DataTableView.toggleSpinner] Spinner COMPUTED display: '${computedDisplay}'.`);
+
+      if (this.spinnerElement.offsetParent !== null) {
+        console.log('[DataTableView.toggleSpinner] Spinner IS VISIBLE on page (offsetParent is not null).');
+      } else {
+        console.warn('[DataTableView.toggleSpinner] Spinner offsetParent is NULL - IT IS LIKELY NOT VISIBLE.');
+        if (this.viewContainer) {
+             const vcStyle = window.getComputedStyle(this.viewContainer);
+             console.warn(`[DataTableView.toggleSpinner] viewContainer details: offsetParent: ${this.viewContainer.offsetParent}, display: ${vcStyle.display}, visibility: ${vcStyle.visibility}, opacity: ${vcStyle.opacity}`);
+        } else {
+            console.warn('[DataTableView.toggleSpinner] viewContainer is null, cannot check its visibility details.');
+        }
+      }
+    } else {
+      console.log('[DataTableView.toggleSpinner] Attempting to hide spinner.');
+      this.spinnerElement.style.display = 'none';
+      console.log(`[DataTableView.toggleSpinner] Spinner style.display SET TO: '${this.spinnerElement.style.display}'.`);
+      const computedDisplay = window.getComputedStyle(this.spinnerElement).display;
+      console.log(`[DataTableView.toggleSpinner] Spinner COMPUTED display (after hide): '${computedDisplay}'.`);
+    }
   }
 
   /**
@@ -131,6 +234,14 @@ export class DataTableView {
   updateTable() {
     if (!this.isInitialized) return;
     
+    // Hide spinner before attempting to render table, 
+    // as render might be called when isApplyingFilters is still true from a previous op,
+    // but new data has arrived.
+    // The 'ui.isApplyingFilters' subscription will manage the spinner visibility during active aggregation.
+    if (this.spinnerElement && this.spinnerElement.style.display !== 'none' && !this.stateManager.state.ui.isApplyingFilters) {
+        this.toggleSpinner(false);
+    }
+
     if (this.currentView === 'aggregated') {
       // For aggregated view, the DataTable component will handle rendering
       // based on the aggregated data in the state

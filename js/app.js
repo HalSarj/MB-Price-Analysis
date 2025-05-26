@@ -32,9 +32,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load data first
     await dataManager.loadAllData();
 
-    // Explicitly set aggregated data to null after initial load to ensure clean state
-    stateManager.setState('data.aggregated', null);
-
     // Initialize filter panel after data is loaded to prevent recursion issues
     const filterPanel = new FilterPanel(
       document.getElementById('filters-panel'),
@@ -137,12 +134,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             try {
                 stateManager.setState('ui.isApplyingFilters', true);
+                console.log('[App] ui.isApplyingFilters state changed:', stateManager.getState('ui.isApplyingFilters'));
 
-                const currentFilters = stateManager.state.filters;
-                console.log('[App] Calling filterManager.applyFilters with:', currentFilters);
-                await filterManager.applyFilters(currentFilters);
-                console.log('[App] filterManager.applyFilters completed.');
-
+                // Yield to browser to paint spinner before starting heavy task
+                setTimeout(async () => {
+                  try {
+                    // Apply filters and re-aggregate data
+                    await filterManager.applyFilters(stateManager.state.filters);
+                    console.log('[App] filterManager.applyFilters completed.');
+                  } catch (error) {
+                    console.error('[App] Error during filterManager.applyFilters:', error);
+                    // Ensure spinner is hidden even if applyFilters fails catastrophically
+                    stateManager.setState('ui.isApplyingFilters', false);
+                  }
+                  // Spinner hiding is now handled by DataTable's renderComplete or DataTableView for null data
+                }, 0);
             } catch (error) {
                 console.error('[App] Error during applyFiltersButton click handler (delegated):', error);
                 stateManager.setState('ui.isApplyingFilters', false); 

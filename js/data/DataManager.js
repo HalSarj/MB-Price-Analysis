@@ -193,7 +193,7 @@ export class DataManager {
     this.setDateRangeFromData(this.rawData);
     
     // Aggregate data
-    this.aggregateData(this.rawData);
+    // this.aggregateData(this.rawData); // Cascade: Commented out to prevent initial aggregation
     
     // Extract and set available premium bands
     const premiumBands = [...new Set(this.rawData
